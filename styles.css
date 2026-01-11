@@ -5,110 +5,225 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    background:
+        radial-gradient(circle at 20% 50%, rgba(0,0,0,0.02) 1px, transparent 1px),
+        radial-gradient(circle at 80% 80%, rgba(0,0,0,0.02) 1px, transparent 1px),
+        linear-gradient(180deg, #e8e4dc 0%, #d4cfc4 100%);
+    background-size: 80px 80px, 60px 60px, 100% 100%;
+    background-attachment: fixed;
     min-height: 100vh;
-    padding: 20px;
-    color: #333;
+    padding: 40px 20px;
+    color: #2c2416;
+    position: relative;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0,0,0,0.01) 2px,
+            rgba(0,0,0,0.01) 4px
+        );
+    pointer-events: none;
+    z-index: 1;
 }
 
 .container {
-    max-width: 900px;
+    max-width: 1000px;
     margin: 0 auto;
+    position: relative;
+    z-index: 2;
 }
 
 header {
     text-align: center;
-    color: white;
-    margin-bottom: 40px;
+    color: #3d3326;
+    margin-bottom: 60px;
+    padding: 30px;
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(10px);
+    border-radius: 3px;
+    box-shadow:
+        0 1px 3px rgba(0,0,0,0.08),
+        0 4px 12px rgba(0,0,0,0.05),
+        inset 0 1px 0 rgba(255,255,255,0.6);
 }
 
 header h1 {
     font-size: 3rem;
-    margin-bottom: 10px;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+    margin-bottom: 12px;
+    font-weight: 400;
+    letter-spacing: 2px;
+    text-shadow:
+        0 1px 0 rgba(255,255,255,0.8),
+        0 2px 4px rgba(0,0,0,0.1);
 }
 
 header p {
-    font-size: 1.2rem;
-    opacity: 0.9;
+    font-size: 1.1rem;
+    color: #5a5045;
+    font-style: italic;
+    font-weight: 300;
 }
 
 .add-milestone-section {
-    background: white;
-    padding: 30px;
-    border-radius: 15px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-    margin-bottom: 40px;
+    background:
+        linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(250,248,245,0.9) 100%);
+    padding: 35px;
+    border-radius: 2px;
+    box-shadow:
+        0 2px 4px rgba(0,0,0,0.08),
+        0 8px 16px rgba(0,0,0,0.1),
+        0 16px 32px rgba(0,0,0,0.08),
+        inset 0 1px 0 rgba(255,255,255,0.9),
+        inset 0 -1px 0 rgba(0,0,0,0.05);
+    margin-bottom: 50px;
+    border: 1px solid rgba(0,0,0,0.08);
+    position: relative;
+}
+
+.add-milestone-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        repeating-linear-gradient(
+            90deg,
+            transparent,
+            transparent 20px,
+            rgba(0,0,0,0.008) 20px,
+            rgba(0,0,0,0.008) 21px
+        );
+    pointer-events: none;
+    border-radius: 2px;
 }
 
 .add-milestone-section h2 {
-    margin-bottom: 20px;
-    color: #667eea;
+    margin-bottom: 25px;
+    color: #4a3f2e;
+    font-weight: 500;
+    font-size: 1.5rem;
+    letter-spacing: 0.5px;
 }
 
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 22px;
 }
 
 .form-group label {
     display: block;
     margin-bottom: 8px;
     font-weight: 600;
-    color: #555;
+    color: #4a3f2e;
+    font-size: 0.95rem;
+    letter-spacing: 0.3px;
 }
 
 .form-group input,
 .form-group textarea,
 .form-group select {
     width: 100%;
-    padding: 12px;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
+    padding: 12px 14px;
+    border: 1px solid #c5bfb3;
+    border-radius: 2px;
     font-size: 1rem;
-    transition: border-color 0.3s;
-    font-family: inherit;
+    transition: all 0.3s ease;
+    font-family: 'Georgia', serif;
+    background:
+        linear-gradient(180deg, #fafaf8 0%, #ffffff 100%);
+    box-shadow:
+        inset 0 1px 2px rgba(0,0,0,0.08),
+        0 1px 0 rgba(255,255,255,0.8);
+    color: #2c2416;
 }
 
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #8b7d6b;
+    box-shadow:
+        inset 0 1px 3px rgba(0,0,0,0.1),
+        0 0 0 3px rgba(139,125,107,0.1),
+        0 1px 0 rgba(255,255,255,0.8);
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 12px 30px;
-    border: none;
-    border-radius: 8px;
-    font-size: 1.1rem;
+    background:
+        linear-gradient(180deg, #6b5d4f 0%, #5a4d3f 100%);
+    color: #f5f3f0;
+    padding: 13px 32px;
+    border: 1px solid #4a3f2e;
+    border-radius: 2px;
+    font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    letter-spacing: 1px;
+    transition: all 0.2s ease;
+    box-shadow:
+        0 2px 4px rgba(0,0,0,0.2),
+        0 4px 8px rgba(0,0,0,0.15),
+        inset 0 1px 0 rgba(255,255,255,0.2),
+        inset 0 -1px 0 rgba(0,0,0,0.3);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
 .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    background:
+        linear-gradient(180deg, #7a6b5c 0%, #6b5d4f 100%);
+    box-shadow:
+        0 3px 6px rgba(0,0,0,0.25),
+        0 6px 12px rgba(0,0,0,0.18),
+        inset 0 1px 0 rgba(255,255,255,0.25),
+        inset 0 -1px 0 rgba(0,0,0,0.3);
+    transform: translateY(-1px);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+    box-shadow:
+        0 1px 2px rgba(0,0,0,0.2),
+        0 2px 4px rgba(0,0,0,0.15),
+        inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .timeline-section {
-    background: white;
-    padding: 30px;
-    border-radius: 15px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    background:
+        linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(250,248,245,0.85) 100%);
+    padding: 40px;
+    border-radius: 2px;
+    box-shadow:
+        0 2px 4px rgba(0,0,0,0.08),
+        0 8px 16px rgba(0,0,0,0.1),
+        0 16px 32px rgba(0,0,0,0.08),
+        inset 0 1px 0 rgba(255,255,255,0.9),
+        inset 0 -1px 0 rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.08);
 }
 
 .timeline-section h2 {
-    margin-bottom: 30px;
-    color: #667eea;
+    margin-bottom: 40px;
+    color: #4a3f2e;
+    font-weight: 500;
+    font-size: 1.5rem;
+    letter-spacing: 0.5px;
 }
 
 .timeline {
     position: relative;
-    padding: 20px 0;
+    padding: 30px 0;
 }
 
 .timeline::before {
@@ -116,31 +231,41 @@ header p {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    width: 4px;
+    width: 3px;
     height: 100%;
-    background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+    background:
+        linear-gradient(180deg,
+            #a8987d 0%,
+            #8b7d6b 50%,
+            #a8987d 100%
+        );
     border-radius: 2px;
+    box-shadow:
+        inset 0 0 2px rgba(0,0,0,0.3),
+        1px 0 0 rgba(255,255,255,0.3),
+        -1px 0 0 rgba(0,0,0,0.2);
 }
 
 .empty-state {
     text-align: center;
-    padding: 40px;
-    color: #999;
+    padding: 50px;
+    color: #8a7d6d;
     font-style: italic;
+    font-size: 1.1rem;
 }
 
 .milestone-item {
     display: flex;
-    margin-bottom: 40px;
+    margin-bottom: 50px;
     position: relative;
     opacity: 0;
-    animation: fadeInUp 0.5s forwards;
+    animation: fadeInUp 0.6s ease-out forwards;
 }
 
 @keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateY(20px);
+        transform: translateY(30px);
     }
     to {
         opacity: 1;
@@ -157,18 +282,47 @@ header p {
 }
 
 .milestone-content {
-    width: calc(50% - 30px);
-    background: #f8f9fa;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    width: calc(50% - 40px);
+    background:
+        linear-gradient(135deg, #fffef9 0%, #faf8f2 100%);
+    padding: 24px;
+    border-radius: 2px;
     position: relative;
-    transition: transform 0.3s, box-shadow 0.3s;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(0,0,0,0.1);
+    box-shadow:
+        0 1px 2px rgba(0,0,0,0.08),
+        0 4px 8px rgba(0,0,0,0.12),
+        0 8px 16px rgba(0,0,0,0.08),
+        inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+.milestone-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 24px,
+            rgba(139,125,107,0.03) 24px,
+            rgba(139,125,107,0.03) 25px
+        );
+    pointer-events: none;
+    border-radius: 2px;
 }
 
 .milestone-content:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    transform: translateY(-4px) rotate(0.5deg);
+    box-shadow:
+        0 2px 4px rgba(0,0,0,0.1),
+        0 8px 16px rgba(0,0,0,0.15),
+        0 16px 32px rgba(0,0,0,0.1),
+        inset 0 1px 0 rgba(255,255,255,0.95);
 }
 
 .milestone-item:nth-child(odd) .milestone-content {
@@ -179,74 +333,148 @@ header p {
     margin-left: auto;
 }
 
+.milestone-item:nth-child(even) .milestone-content:hover {
+    transform: translateY(-4px) rotate(-0.5deg);
+}
+
 .milestone-dot {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    width: 20px;
-    height: 20px;
-    background: white;
-    border: 4px solid #667eea;
+    width: 18px;
+    height: 18px;
+    background:
+        radial-gradient(circle, #fffef9 0%, #e8dfd0 100%);
+    border: 2px solid #8b7d6b;
     border-radius: 50%;
     z-index: 1;
-    transition: transform 0.3s;
+    transition: all 0.3s ease;
+    box-shadow:
+        0 2px 4px rgba(0,0,0,0.2),
+        0 4px 8px rgba(0,0,0,0.15),
+        inset 0 1px 2px rgba(255,255,255,0.8),
+        inset 0 -1px 1px rgba(0,0,0,0.2);
 }
 
 .milestone-item:hover .milestone-dot {
-    transform: translateX(-50%) scale(1.3);
+    transform: translateX(-50%) scale(1.2);
+    box-shadow:
+        0 3px 6px rgba(0,0,0,0.25),
+        0 6px 12px rgba(0,0,0,0.18),
+        inset 0 1px 2px rgba(255,255,255,0.9),
+        inset 0 -1px 1px rgba(0,0,0,0.25);
 }
 
 .milestone-date {
-    font-size: 0.9rem;
-    color: #667eea;
-    font-weight: 600;
-    margin-bottom: 8px;
+    font-size: 0.85rem;
+    color: #8b7d6b;
+    font-weight: 700;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-family: 'Courier New', monospace;
 }
 
 .milestone-title {
-    font-size: 1.3rem;
-    font-weight: 700;
-    margin-bottom: 10px;
-    color: #333;
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #2c2416;
+    line-height: 1.3;
 }
 
 .milestone-description {
-    color: #666;
-    line-height: 1.6;
-    margin-bottom: 10px;
+    color: #5a5045;
+    line-height: 1.7;
+    margin-bottom: 14px;
+    font-size: 0.98rem;
 }
 
 .milestone-category {
     display: inline-block;
-    padding: 4px 12px;
-    border-radius: 15px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    margin-bottom: 10px;
+    padding: 5px 14px;
+    border-radius: 2px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    box-shadow:
+        0 1px 2px rgba(0,0,0,0.15),
+        inset 0 1px 0 rgba(255,255,255,0.4);
+    border: 1px solid rgba(0,0,0,0.1);
 }
 
-.category-personal { background: #e3f2fd; color: #1976d2; }
-.category-career { background: #f3e5f5; color: #7b1fa2; }
-.category-education { background: #fff3e0; color: #e65100; }
-.category-family { background: #fce4ec; color: #c2185b; }
-.category-property { background: #e8f5e9; color: #388e3c; }
-.category-travel { background: #fff9c4; color: #f57f17; }
-.category-achievement { background: #ffebee; color: #d32f2f; }
-.category-other { background: #f5f5f5; color: #616161; }
+.category-personal {
+    background: linear-gradient(180deg, #d4e6f1 0%, #c3dbed 100%);
+    color: #1a5276;
+}
+.category-career {
+    background: linear-gradient(180deg, #e8daef 0%, #d7c9e0 100%);
+    color: #4a235a;
+}
+.category-education {
+    background: linear-gradient(180deg, #fdebd0 0%, #f8e3c0 100%);
+    color: #7e5109;
+}
+.category-family {
+    background: linear-gradient(180deg, #fadbd8 0%, #f5cac7 100%);
+    color: #78281f;
+}
+.category-property {
+    background: linear-gradient(180deg, #d5f4e6 0%, #c4ebd7 100%);
+    color: #145a32;
+}
+.category-travel {
+    background: linear-gradient(180deg, #fef5cd 0%, #fcedb8 100%);
+    color: #7d6608;
+}
+.category-achievement {
+    background: linear-gradient(180deg, #f9e7e8 0%, #f4d6d8 100%);
+    color: #922b21;
+}
+.category-other {
+    background: linear-gradient(180deg, #e5e5e5 0%, #d6d6d6 100%);
+    color: #424242;
+}
 
 .btn-delete {
-    background: #ff4757;
-    color: white;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 5px;
+    background:
+        linear-gradient(180deg, #9b4646 0%, #7f3838 100%);
+    color: #faf8f5;
+    border: 1px solid #5c2828;
+    padding: 7px 14px;
+    border-radius: 2px;
     cursor: pointer;
-    font-size: 0.85rem;
-    transition: background 0.3s;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    transition: all 0.2s ease;
+    box-shadow:
+        0 2px 4px rgba(0,0,0,0.2),
+        0 3px 6px rgba(0,0,0,0.15),
+        inset 0 1px 0 rgba(255,255,255,0.2),
+        inset 0 -1px 0 rgba(0,0,0,0.3);
+    text-shadow: 0 1px 1px rgba(0,0,0,0.3);
 }
 
 .btn-delete:hover {
-    background: #ee5a6f;
+    background:
+        linear-gradient(180deg, #b05252 0%, #9b4646 100%);
+    box-shadow:
+        0 3px 6px rgba(0,0,0,0.25),
+        0 5px 10px rgba(0,0,0,0.18),
+        inset 0 1px 0 rgba(255,255,255,0.25),
+        inset 0 -1px 0 rgba(0,0,0,0.3);
+    transform: translateY(-1px);
+}
+
+.btn-delete:active {
+    transform: translateY(0);
+    box-shadow:
+        0 1px 2px rgba(0,0,0,0.2),
+        0 2px 4px rgba(0,0,0,0.15),
+        inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
 @media (max-width: 768px) {
@@ -266,8 +494,8 @@ header p {
     .milestone-content,
     .milestone-item:nth-child(odd) .milestone-content,
     .milestone-item:nth-child(even) .milestone-content {
-        width: calc(100% - 50px);
-        margin-left: 50px !important;
+        width: calc(100% - 60px);
+        margin-left: 60px !important;
         margin-right: 0 !important;
     }
 
