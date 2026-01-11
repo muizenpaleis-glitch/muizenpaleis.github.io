@@ -24,7 +24,7 @@ function createMilestoneElement(milestone, index) {
     const div = document.createElement('div');
     div.className = 'milestone-item';
     div.innerHTML = `
-        <div class="milestone-content">
+        <div class="milestone-content" style="background: ${milestone.color || '#fffef9'} !important;">
             <div class="milestone-date">${formatDate(milestone.date)}</div>
             <div class="milestone-title">${escapeHtml(milestone.title)}</div>
             <span class="milestone-category category-${milestone.category}">${milestone.category}</span>
@@ -48,8 +48,8 @@ function renderMilestones() {
     const container = document.getElementById('timeline-container');
     const milestones = loadMilestones();
 
-    // Sort milestones by date (newest first)
-    milestones.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Sort milestones by date (oldest first for horizontal timeline)
+    milestones.sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (milestones.length === 0) {
         container.innerHTML = '<div class="empty-state"><p>No milestones yet. Add your first milestone above!</p></div>';
@@ -70,12 +70,14 @@ function addMilestone(event) {
     const date = document.getElementById('milestone-date').value;
     const description = document.getElementById('milestone-description').value;
     const category = document.getElementById('milestone-category').value;
+    const color = document.getElementById('milestone-color').value;
 
     const milestone = {
         title,
         date,
         description,
         category,
+        color,
         id: Date.now()
     };
 
@@ -85,6 +87,7 @@ function addMilestone(event) {
 
     // Reset form
     document.getElementById('milestone-form').reset();
+    document.getElementById('milestone-color').value = '#fffef9';
 
     // Re-render timeline
     renderMilestones();
@@ -99,7 +102,7 @@ function deleteMilestone(index) {
         const milestones = loadMilestones();
 
         // Sort to match the display order before deleting
-        milestones.sort((a, b) => new Date(b.date) - new Date(a.date));
+        milestones.sort((a, b) => new Date(a.date) - new Date(b.date));
 
         milestones.splice(index, 1);
         saveMilestones(milestones);

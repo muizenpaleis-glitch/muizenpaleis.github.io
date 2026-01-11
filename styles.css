@@ -211,6 +211,7 @@ header p {
         inset 0 1px 0 rgba(255,255,255,0.9),
         inset 0 -1px 0 rgba(0,0,0,0.05);
     border: 1px solid rgba(0,0,0,0.08);
+    overflow-x: auto;
 }
 
 .timeline-section h2 {
@@ -223,18 +224,23 @@ header p {
 
 .timeline {
     position: relative;
-    padding: 30px 0;
+    padding: 80px 30px;
+    display: flex;
+    gap: 50px;
+    min-width: min-content;
 }
 
 .timeline::before {
     content: '';
     position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 3px;
-    height: 100%;
+    top: 50%;
+    left: 0;
+    right: 0;
+    transform: translateY(-50%);
+    height: 3px;
+    width: 100%;
     background:
-        linear-gradient(180deg,
+        linear-gradient(90deg,
             #a8987d 0%,
             #8b7d6b 50%,
             #a8987d 100%
@@ -242,8 +248,8 @@ header p {
     border-radius: 2px;
     box-shadow:
         inset 0 0 2px rgba(0,0,0,0.3),
-        1px 0 0 rgba(255,255,255,0.3),
-        -1px 0 0 rgba(0,0,0,0.2);
+        0 1px 0 rgba(255,255,255,0.3),
+        0 -1px 0 rgba(0,0,0,0.2);
 }
 
 .empty-state {
@@ -256,10 +262,12 @@ header p {
 
 .milestone-item {
     display: flex;
-    margin-bottom: 50px;
+    flex-direction: column;
     position: relative;
     opacity: 0;
     animation: fadeInUp 0.6s ease-out forwards;
+    min-width: 280px;
+    max-width: 320px;
 }
 
 @keyframes fadeInUp {
@@ -274,15 +282,16 @@ header p {
 }
 
 .milestone-item:nth-child(odd) {
-    flex-direction: row;
+    align-items: flex-start;
 }
 
 .milestone-item:nth-child(even) {
-    flex-direction: row-reverse;
+    align-items: flex-start;
+    flex-direction: column-reverse;
 }
 
 .milestone-content {
-    width: calc(50% - 40px);
+    width: 100%;
     background:
         linear-gradient(135deg, #fffef9 0%, #faf8f2 100%);
     padding: 24px;
@@ -326,21 +335,19 @@ header p {
 }
 
 .milestone-item:nth-child(odd) .milestone-content {
-    margin-right: auto;
+    margin-bottom: 40px;
 }
 
 .milestone-item:nth-child(even) .milestone-content {
-    margin-left: auto;
+    margin-top: 40px;
 }
 
 .milestone-item:nth-child(even) .milestone-content:hover {
-    transform: translateY(-4px) rotate(-0.5deg);
+    transform: translateY(4px) rotate(-0.5deg);
 }
 
 .milestone-dot {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
     width: 18px;
     height: 18px;
     background:
@@ -354,10 +361,11 @@ header p {
         0 4px 8px rgba(0,0,0,0.15),
         inset 0 1px 2px rgba(255,255,255,0.8),
         inset 0 -1px 1px rgba(0,0,0,0.2);
+    flex-shrink: 0;
 }
 
 .milestone-item:hover .milestone-dot {
-    transform: translateX(-50%) scale(1.2);
+    transform: scale(1.2);
     box-shadow:
         0 3px 6px rgba(0,0,0,0.25),
         0 6px 12px rgba(0,0,0,0.18),
@@ -482,24 +490,25 @@ header p {
         font-size: 2rem;
     }
 
-    .timeline::before {
-        left: 20px;
+    .timeline {
+        padding: 60px 20px;
+        gap: 30px;
     }
 
-    .milestone-item,
-    .milestone-item:nth-child(even) {
-        flex-direction: row !important;
+    .milestone-item {
+        min-width: 220px;
+        max-width: 260px;
     }
 
-    .milestone-content,
-    .milestone-item:nth-child(odd) .milestone-content,
+    .milestone-content {
+        padding: 18px;
+    }
+
+    .milestone-item:nth-child(odd) .milestone-content {
+        margin-bottom: 30px;
+    }
+
     .milestone-item:nth-child(even) .milestone-content {
-        width: calc(100% - 60px);
-        margin-left: 60px !important;
-        margin-right: 0 !important;
-    }
-
-    .milestone-dot {
-        left: 20px;
+        margin-top: 30px;
     }
 }
