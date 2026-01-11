@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life Milestone Timeline</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>My Life Timeline</h1>
+            <p>Track your important life milestones</p>
+        </header>
+
+        <div class="add-milestone-section">
+            <h2>Add New Milestone</h2>
+            <form id="milestone-form">
+                <div class="form-group">
+                    <label for="milestone-title">Milestone Title</label>
+                    <input type="text" id="milestone-title" placeholder="e.g., Got Married" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="milestone-date">Date</label>
+                    <input type="date" id="milestone-date" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="milestone-description">Description</label>
+                    <textarea id="milestone-description" placeholder="Add details about this milestone..." rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="milestone-category">Category</label>
+                    <select id="milestone-category">
+                        <option value="personal">Personal</option>
+                        <option value="career">Career</option>
+                        <option value="education">Education</option>
+                        <option value="family">Family</option>
+                        <option value="property">Property</option>
+                        <option value="travel">Travel</option>
+                        <option value="achievement">Achievement</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-primary">Add Milestone</button>
+            </form>
+        </div>
+
+        <div class="timeline-section">
+            <h2>Your Timeline</h2>
+            <div id="timeline-container" class="timeline">
+                <div class="empty-state">
+                    <p>No milestones yet. Add your first milestone above!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
