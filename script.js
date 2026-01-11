@@ -24,7 +24,7 @@ function createMilestoneElement(milestone, index) {
     const div = document.createElement('div');
     div.className = 'milestone-item';
     div.innerHTML = `
-        <div class="milestone-content" style="background: ${milestone.color || '#fffef9'} !important;">
+        <div class="milestone-content" style="background: ${milestone.color || '#e8dcc8'} !important;">
             <div class="milestone-date">${formatDate(milestone.date)}</div>
             <div class="milestone-title">${escapeHtml(milestone.title)}</div>
             <span class="milestone-category category-${milestone.category}">${milestone.category}</span>
@@ -87,7 +87,7 @@ function addMilestone(event) {
 
     // Reset form
     document.getElementById('milestone-form').reset();
-    document.getElementById('milestone-color').value = '#fffef9';
+    document.getElementById('milestone-color').value = '#d4b896';
 
     // Re-render timeline
     renderMilestones();
@@ -121,6 +121,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set max date to today for date input
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('milestone-date').setAttribute('max', today);
+
+    // Sidebar toggle functionality
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+
+    toggleBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('sidebar-hidden');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', (e) => {
+        if (window.innerWidth <= 768 &&
+            !sidebar.contains(e.target) &&
+            !toggleBtn.contains(e.target) &&
+            !sidebar.classList.contains('sidebar-hidden')) {
+            sidebar.classList.add('sidebar-hidden');
+        }
+    });
 });
 
 // Make deleteMilestone available globally
