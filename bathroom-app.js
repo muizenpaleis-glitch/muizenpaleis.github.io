@@ -1,6 +1,321 @@
 // Bathroom Design Tool - 3D Application
 // Using Three.js for 3D rendering
 
+// Shape Editor Class for 2D floor plan editing
+class ShapeEditor {
+    constructor(canvas, onChange) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.onChange = onChange;
+
+        // Points in meters (will be scaled for display)
+        this.points = [];
+        this.scale = 40; // pixels per meter
+        this.offsetX = 120;
+        this.offsetY = 100;
+
+        // Interaction state
+        this.selectedPoint = -1;
+        this.isDragging = false;
+        this.hoverPoint = -1;
+
+        // Set default rectangle shape
+        this.setPresetShape('rectangle');
+
+        this.setupEvents();
+    }
+
+    setupEvents() {
+        this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
+        this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+        this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.onRightClick(e);
+        });
+        this.canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
+    }
+
+    getMousePos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left - this.offsetX) / this.scale,
+            y: (e.clientY - rect.top - this.offsetY) / this.scale
+        };
+    }
+
+    findPointAt(pos, threshold = 0.2) {
+        for (let i = 0; i < this.points.length; i++) {
+            const dx = this.points[i].x - pos.x;
+            const dy = this.points[i].y - pos.y;
+            if (Math.sqrt(dx * dx + dy * dy) < threshold) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    findEdgeAt(pos, threshold = 0.15) {
+        for (let i = 0; i < this.points.length; i++) {
+            const p1 = this.points[i];
+            const p2 = this.points[(i + 1) % this.points.length];
+
+            // Distance from point to line segment
+            const dist = this.pointToSegmentDistance(pos, p1, p2);
+            if (dist < threshold) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    pointToSegmentDistance(p, a, b) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy;
+
+        if (len2 === 0) return Math.sqrt((p.x - a.x) ** 2 + (p.y - a.y) ** 2);
+
+        let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+
+        const projX = a.x + t * dx;
+        const projY = a.y + t * dy;
+
+        return Math.sqrt((p.x - projX) ** 2 + (p.y - projY) ** 2);
+    }
+
+    onMouseDown(e) {
+        const pos = this.getMousePos(e);
+
+        if (e.button === 0) { // Left click
+            const pointIndex = this.findPointAt(pos);
+
+            if (pointIndex >= 0) {
+                this.selectedPoint = pointIndex;
+                this.isDragging = true;
+            }
+        }
+    }
+
+    onMouseMove(e) {
+        const pos = this.getMousePos(e);
+
+        if (this.isDragging && this.selectedPoint >= 0) {
+            // Snap to grid (0.1m)
+            this.points[this.selectedPoint].x = Math.round(pos.x * 10) / 10;
+            this.points[this.selectedPoint].y = Math.round(pos.y * 10) / 10;
+            this.draw();
+            this.onChange(this.points);
+        } else {
+            // Update hover state
+            const newHover = this.findPointAt(pos);
+            if (newHover !== this.hoverPoint) {
+                this.hoverPoint = newHover;
+                this.draw();
+            }
+        }
+    }
+
+    onMouseUp(e) {
+        this.isDragging = false;
+        this.selectedPoint = -1;
+    }
+
+    onRightClick(e) {
+        const pos = this.getMousePos(e);
+        const pointIndex = this.findPointAt(pos);
+
+        // Delete point if we have more than 3
+        if (pointIndex >= 0 && this.points.length > 3) {
+            this.points.splice(pointIndex, 1);
+            this.draw();
+            this.onChange(this.points);
+        }
+    }
+
+    onDoubleClick(e) {
+        const pos = this.getMousePos(e);
+
+        // Check if clicking on an edge to add a point
+        const edgeIndex = this.findEdgeAt(pos);
+
+        if (edgeIndex >= 0) {
+            // Insert point on edge
+            const newPoint = { x: Math.round(pos.x * 10) / 10, y: Math.round(pos.y * 10) / 10 };
+            this.points.splice(edgeIndex + 1, 0, newPoint);
+            this.draw();
+            this.onChange(this.points);
+        }
+    }
+
+    setPresetShape(shape) {
+        switch (shape) {
+            case 'rectangle':
+                this.points = [
+                    { x: -1.5, y: -1.25 },
+                    { x: 1.5, y: -1.25 },
+                    { x: 1.5, y: 1.25 },
+                    { x: -1.5, y: 1.25 }
+                ];
+                break;
+            case 'l-shape':
+                this.points = [
+                    { x: -1.5, y: -1.5 },
+                    { x: 0.5, y: -1.5 },
+                    { x: 0.5, y: 0 },
+                    { x: 1.5, y: 0 },
+                    { x: 1.5, y: 1.5 },
+                    { x: -1.5, y: 1.5 }
+                ];
+                break;
+            case 't-shape':
+                this.points = [
+                    { x: -0.5, y: -1.5 },
+                    { x: 0.5, y: -1.5 },
+                    { x: 0.5, y: -0.5 },
+                    { x: 1.5, y: -0.5 },
+                    { x: 1.5, y: 0.5 },
+                    { x: 0.5, y: 0.5 },
+                    { x: 0.5, y: 1.5 },
+                    { x: -0.5, y: 1.5 },
+                    { x: -0.5, y: 0.5 },
+                    { x: -1.5, y: 0.5 },
+                    { x: -1.5, y: -0.5 },
+                    { x: -0.5, y: -0.5 }
+                ];
+                break;
+            case 'custom':
+                // Pentagon as starting custom shape
+                this.points = [
+                    { x: 0, y: -1.5 },
+                    { x: 1.4, y: -0.5 },
+                    { x: 0.9, y: 1.2 },
+                    { x: -0.9, y: 1.2 },
+                    { x: -1.4, y: -0.5 }
+                ];
+                break;
+        }
+        this.draw();
+        this.onChange(this.points);
+    }
+
+    setPoints(points) {
+        this.points = points.map(p => ({ x: p.x, y: p.y }));
+        this.draw();
+    }
+
+    getPoints() {
+        return this.points.map(p => ({ x: p.x, y: p.y }));
+    }
+
+    calculateArea() {
+        // Shoelace formula
+        let area = 0;
+        const n = this.points.length;
+        for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            area += this.points[i].x * this.points[j].y;
+            area -= this.points[j].x * this.points[i].y;
+        }
+        return Math.abs(area / 2);
+    }
+
+    draw() {
+        const ctx = this.ctx;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        // Clear
+        ctx.fillStyle = '#1e272e';
+        ctx.fillRect(0, 0, w, h);
+
+        // Draw grid
+        ctx.strokeStyle = '#3d4852';
+        ctx.lineWidth = 1;
+
+        for (let x = -3; x <= 3; x += 0.5) {
+            const px = this.offsetX + x * this.scale;
+            ctx.beginPath();
+            ctx.moveTo(px, 0);
+            ctx.lineTo(px, h);
+            ctx.stroke();
+        }
+
+        for (let y = -2.5; y <= 2.5; y += 0.5) {
+            const py = this.offsetY + y * this.scale;
+            ctx.beginPath();
+            ctx.moveTo(0, py);
+            ctx.lineTo(w, py);
+            ctx.stroke();
+        }
+
+        // Draw meter marks
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+
+        for (let x = -2; x <= 2; x++) {
+            const px = this.offsetX + x * this.scale;
+            ctx.fillText(`${x}m`, px, h - 5);
+        }
+
+        // Draw shape
+        if (this.points.length >= 3) {
+            // Fill
+            ctx.beginPath();
+            ctx.moveTo(
+                this.offsetX + this.points[0].x * this.scale,
+                this.offsetY + this.points[0].y * this.scale
+            );
+            for (let i = 1; i < this.points.length; i++) {
+                ctx.lineTo(
+                    this.offsetX + this.points[i].x * this.scale,
+                    this.offsetY + this.points[i].y * this.scale
+                );
+            }
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.2)';
+            ctx.fill();
+
+            // Stroke
+            ctx.strokeStyle = '#3498db';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw points
+            for (let i = 0; i < this.points.length; i++) {
+                const px = this.offsetX + this.points[i].x * this.scale;
+                const py = this.offsetY + this.points[i].y * this.scale;
+
+                ctx.beginPath();
+                ctx.arc(px, py, i === this.hoverPoint ? 8 : 6, 0, Math.PI * 2);
+                ctx.fillStyle = i === this.hoverPoint ? '#e74c3c' : '#3498db';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Draw dimensions on edges
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '9px sans-serif';
+
+            for (let i = 0; i < this.points.length; i++) {
+                const p1 = this.points[i];
+                const p2 = this.points[(i + 1) % this.points.length];
+                const midX = this.offsetX + (p1.x + p2.x) / 2 * this.scale;
+                const midY = this.offsetY + (p1.y + p2.y) / 2 * this.scale;
+                const length = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
+
+                if (length > 0.3) {
+                    ctx.fillText(`${length.toFixed(1)}m`, midX, midY - 8);
+                }
+            }
+        }
+    }
+}
+
 class BathroomDesigner {
     constructor() {
         this.scene = null;
@@ -11,11 +326,14 @@ class BathroomDesigner {
         this.mouse = new THREE.Vector2();
 
         // Room properties
-        this.roomWidth = 3;
-        this.roomDepth = 2.5;
         this.roomHeight = 2.4;
+        this.roomScale = 1;
         this.wallColor = 0xe8e4e0;
         this.floorColor = 0x8b7355;
+
+        // Room shape (polygon points)
+        this.roomShape = [];
+        this.shapeEditor = null;
 
         // Room meshes
         this.floor = null;
@@ -58,6 +376,7 @@ class BathroomDesigner {
     init() {
         this.createScene();
         this.createLights();
+        this.setupShapeEditor();
         this.createRoom();
         this.setupEventListeners();
         this.setupControls();
@@ -65,6 +384,16 @@ class BathroomDesigner {
 
         // Hide loading
         document.getElementById('loading').classList.add('hidden');
+    }
+
+    setupShapeEditor() {
+        const canvas = document.getElementById('shape-editor');
+        this.shapeEditor = new ShapeEditor(canvas, (points) => {
+            this.roomShape = points;
+            this.createRoom();
+            this.updateRoomSizeDisplay();
+        });
+        this.roomShape = this.shapeEditor.getPoints();
     }
 
     createScene() {
@@ -127,8 +456,23 @@ class BathroomDesigner {
 
         this.room = new THREE.Group();
 
-        // Floor
-        const floorGeometry = new THREE.PlaneGeometry(this.roomWidth, this.roomDepth);
+        if (this.roomShape.length < 3) return;
+
+        const scale = this.roomScale;
+        const scaledPoints = this.roomShape.map(p => ({
+            x: p.x * scale,
+            y: p.y * scale
+        }));
+
+        // Create floor using Shape
+        const floorShape = new THREE.Shape();
+        floorShape.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+        for (let i = 1; i < scaledPoints.length; i++) {
+            floorShape.lineTo(scaledPoints[i].x, scaledPoints[i].y);
+        }
+        floorShape.closePath();
+
+        const floorGeometry = new THREE.ShapeGeometry(floorShape);
         const floorMaterial = new THREE.MeshStandardMaterial({
             color: this.floorColor,
             roughness: 0.8,
@@ -141,12 +485,15 @@ class BathroomDesigner {
         this.room.add(this.floor);
 
         // Add floor grid
-        const gridHelper = new THREE.GridHelper(Math.max(this.roomWidth, this.roomDepth),
-            Math.max(this.roomWidth, this.roomDepth) * 2, 0x444444, 0x333333);
+        const bounds = this.getShapeBounds(scaledPoints);
+        const gridSize = Math.max(bounds.width, bounds.height) + 2;
+        const gridHelper = new THREE.GridHelper(gridSize, gridSize * 2, 0x444444, 0x333333);
         gridHelper.position.y = 0.001;
+        gridHelper.position.x = bounds.centerX;
+        gridHelper.position.z = bounds.centerY;
         this.room.add(gridHelper);
 
-        // Walls
+        // Create walls
         const wallMaterial = new THREE.MeshStandardMaterial({
             color: this.wallColor,
             roughness: 0.9,
@@ -154,37 +501,72 @@ class BathroomDesigner {
             side: THREE.DoubleSide
         });
 
-        // Back wall
-        const backWall = new THREE.Mesh(
-            new THREE.PlaneGeometry(this.roomWidth, this.roomHeight),
-            wallMaterial
-        );
-        backWall.position.set(0, this.roomHeight / 2, -this.roomDepth / 2);
-        backWall.receiveShadow = true;
-        this.room.add(backWall);
+        for (let i = 0; i < scaledPoints.length; i++) {
+            const p1 = scaledPoints[i];
+            const p2 = scaledPoints[(i + 1) % scaledPoints.length];
 
-        // Left wall
-        const leftWall = new THREE.Mesh(
-            new THREE.PlaneGeometry(this.roomDepth, this.roomHeight),
-            wallMaterial
-        );
-        leftWall.position.set(-this.roomWidth / 2, this.roomHeight / 2, 0);
-        leftWall.rotation.y = Math.PI / 2;
-        leftWall.receiveShadow = true;
-        this.room.add(leftWall);
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
 
-        // Right wall
-        const rightWall = new THREE.Mesh(
-            new THREE.PlaneGeometry(this.roomDepth, this.roomHeight),
-            wallMaterial
-        );
-        rightWall.position.set(this.roomWidth / 2, this.roomHeight / 2, 0);
-        rightWall.rotation.y = -Math.PI / 2;
-        rightWall.receiveShadow = true;
-        this.room.add(rightWall);
+            const wallGeometry = new THREE.PlaneGeometry(length, this.roomHeight);
+            const wall = new THREE.Mesh(wallGeometry, wallMaterial.clone());
+
+            // Position at midpoint of edge
+            wall.position.x = (p1.x + p2.x) / 2;
+            wall.position.z = (p1.y + p2.y) / 2;
+            wall.position.y = this.roomHeight / 2;
+
+            // Rotate to face inward
+            wall.rotation.y = -angle + Math.PI / 2;
+
+            wall.receiveShadow = true;
+            wall.castShadow = true;
+            this.room.add(wall);
+        }
 
         this.scene.add(this.room);
-        this.updateRoomSizeDisplay();
+    }
+
+    getShapeBounds(points) {
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        for (const p of points) {
+            minX = Math.min(minX, p.x);
+            maxX = Math.max(maxX, p.x);
+            minY = Math.min(minY, p.y);
+            maxY = Math.max(maxY, p.y);
+        }
+
+        return {
+            minX, maxX, minY, maxY,
+            width: maxX - minX,
+            height: maxY - minY,
+            centerX: (minX + maxX) / 2,
+            centerY: (minY + maxY) / 2
+        };
+    }
+
+    isPointInRoom(x, z) {
+        // Ray casting algorithm for point in polygon
+        const scale = this.roomScale;
+        const scaledPoints = this.roomShape.map(p => ({
+            x: p.x * scale,
+            y: p.y * scale
+        }));
+
+        let inside = false;
+        for (let i = 0, j = scaledPoints.length - 1; i < scaledPoints.length; j = i++) {
+            const xi = scaledPoints[i].x, yi = scaledPoints[i].y;
+            const xj = scaledPoints[j].x, yj = scaledPoints[j].y;
+
+            if (((yi > z) !== (yj > z)) && (x < (xj - xi) * (z - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+        }
+        return inside;
     }
 
     createFurniture(type, position = null) {
@@ -241,7 +623,6 @@ class BathroomDesigner {
             group.position.set(0, 0, 0);
             if (config.wallMounted) {
                 group.position.y = 1.4;
-                group.position.z = -this.roomDepth / 2 + 0.05;
             }
         }
 
@@ -564,22 +945,18 @@ class BathroomDesigner {
     }
 
     setupControls() {
-        // Room dimension controls
-        this.setupDimensionControl('room-width', 'room-width-slider', (val) => {
-            this.roomWidth = parseFloat(val);
-            this.createRoom();
-            this.constrainItemsToRoom();
-        });
-
-        this.setupDimensionControl('room-depth', 'room-depth-slider', (val) => {
-            this.roomDepth = parseFloat(val);
-            this.createRoom();
-            this.constrainItemsToRoom();
-        });
-
+        // Room height control
         this.setupDimensionControl('room-height', 'room-height-slider', (val) => {
             this.roomHeight = parseFloat(val);
             this.createRoom();
+            this.updateRoomSizeDisplay();
+        });
+
+        // Room scale control
+        this.setupDimensionControl('room-scale', 'room-scale-slider', (val) => {
+            this.roomScale = parseFloat(val);
+            this.createRoom();
+            this.updateRoomSizeDisplay();
         });
 
         // Color controls
@@ -600,6 +977,22 @@ class BathroomDesigner {
 
         // Reset camera
         document.getElementById('reset-camera').addEventListener('click', () => this.resetCamera());
+
+        // Shape preset buttons
+        document.querySelectorAll('.shape-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.shape-preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.shapeEditor.setPresetShape(btn.dataset.shape);
+            });
+        });
+
+        // Clear shape button
+        document.getElementById('clear-shape').addEventListener('click', () => {
+            const activeBtn = document.querySelector('.shape-preset-btn.active');
+            const shape = activeBtn ? activeBtn.dataset.shape : 'rectangle';
+            this.shapeEditor.setPresetShape(shape);
+        });
 
         // Furniture buttons
         document.querySelectorAll('.furniture-btn').forEach(btn => {
@@ -637,14 +1030,12 @@ class BathroomDesigner {
         document.getElementById('item-pos-x').addEventListener('change', (e) => {
             if (this.selectedItem) {
                 this.selectedItem.position.x = parseFloat(e.target.value);
-                this.constrainItemToRoom(this.selectedItem);
             }
         });
 
         document.getElementById('item-pos-z').addEventListener('change', (e) => {
             if (this.selectedItem) {
                 this.selectedItem.position.z = parseFloat(e.target.value);
-                this.constrainItemToRoom(this.selectedItem);
             }
         });
 
@@ -788,7 +1179,6 @@ class BathroomDesigner {
             this.selectedItem.position.x = intersection.x + this.dragOffset.x;
             this.selectedItem.position.z = intersection.z + this.dragOffset.z;
 
-            this.constrainItemToRoom(this.selectedItem);
             this.updatePropertyPanel();
         }
     }
@@ -833,7 +1223,6 @@ class BathroomDesigner {
                 break;
         }
 
-        this.constrainItemToRoom(this.selectedItem);
         this.updatePropertyPanel();
     }
 
@@ -904,24 +1293,6 @@ class BathroomDesigner {
         document.getElementById('item-color').value = '#' + data.color.toString(16).padStart(6, '0');
     }
 
-    constrainItemToRoom(item) {
-        const data = item.userData;
-        const halfW = data.width / 2;
-        const halfD = data.depth / 2;
-
-        const minX = -this.roomWidth / 2 + halfW;
-        const maxX = this.roomWidth / 2 - halfW;
-        const minZ = -this.roomDepth / 2 + halfD;
-        const maxZ = this.roomDepth / 2 - halfD;
-
-        item.position.x = Math.max(minX, Math.min(maxX, item.position.x));
-        item.position.z = Math.max(minZ, Math.min(maxZ, item.position.z));
-    }
-
-    constrainItemsToRoom() {
-        this.items.forEach(item => this.constrainItemToRoom(item));
-    }
-
     deleteSelectedItem() {
         if (!this.selectedItem) return;
 
@@ -954,7 +1325,6 @@ class BathroomDesigner {
             newItem.userData.color = data.color;
 
             this.rebuildItem(newItem);
-            this.constrainItemToRoom(newItem);
             this.selectItem(newItem);
         }
     }
@@ -1012,8 +1382,10 @@ class BathroomDesigner {
     }
 
     updateRoomSizeDisplay() {
+        const area = this.shapeEditor.calculateArea() * this.roomScale * this.roomScale;
         document.getElementById('room-size-display').textContent =
-            `${this.roomWidth.toFixed(1)}m x ${this.roomDepth.toFixed(1)}m x ${this.roomHeight.toFixed(1)}m`;
+            `Height: ${this.roomHeight.toFixed(1)}m | Area: ${area.toFixed(1)} m²`;
+        document.getElementById('room-area-display').textContent = `Area: ${area.toFixed(1)} m²`;
     }
 
     updateItemCount() {
@@ -1076,9 +1448,9 @@ class BathroomDesigner {
     saveDesign() {
         const design = {
             room: {
-                width: this.roomWidth,
-                depth: this.roomDepth,
+                shape: this.roomShape,
                 height: this.roomHeight,
+                scale: this.roomScale,
                 wallColor: this.wallColor,
                 floorColor: this.floorColor
             },
@@ -1139,23 +1511,26 @@ class BathroomDesigner {
 
         // Apply room settings
         if (design.room) {
-            this.roomWidth = design.room.width || 3;
-            this.roomDepth = design.room.depth || 2.5;
             this.roomHeight = design.room.height || 2.4;
+            this.roomScale = design.room.scale || 1;
             this.wallColor = design.room.wallColor || 0xe8e4e0;
             this.floorColor = design.room.floorColor || 0x8b7355;
 
+            if (design.room.shape) {
+                this.roomShape = design.room.shape;
+                this.shapeEditor.setPoints(design.room.shape);
+            }
+
             // Update controls
-            document.getElementById('room-width').value = this.roomWidth;
-            document.getElementById('room-width-slider').value = this.roomWidth;
-            document.getElementById('room-depth').value = this.roomDepth;
-            document.getElementById('room-depth-slider').value = this.roomDepth;
             document.getElementById('room-height').value = this.roomHeight;
             document.getElementById('room-height-slider').value = this.roomHeight;
+            document.getElementById('room-scale').value = this.roomScale;
+            document.getElementById('room-scale-slider').value = this.roomScale;
             document.getElementById('wall-color').value = '#' + this.wallColor.toString(16).padStart(6, '0');
             document.getElementById('floor-color').value = '#' + this.floorColor.toString(16).padStart(6, '0');
 
             this.createRoom();
+            this.updateRoomSizeDisplay();
         }
 
         // Add items

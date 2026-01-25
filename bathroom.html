@@ -16,21 +16,46 @@
             </div>
             <div class="sidebar-content">
                 <div class="control-section">
+                    <h3>Room Shape</h3>
+                    <div class="shape-presets">
+                        <button class="shape-preset-btn active" data-shape="rectangle" title="Rectangle">
+                            <svg viewBox="0 0 40 30"><rect x="2" y="2" width="36" height="26" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                        </button>
+                        <button class="shape-preset-btn" data-shape="l-shape" title="L-Shape">
+                            <svg viewBox="0 0 40 30"><path d="M2 2 L22 2 L22 14 L38 14 L38 28 L2 28 Z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                        </button>
+                        <button class="shape-preset-btn" data-shape="t-shape" title="T-Shape">
+                            <svg viewBox="0 0 40 30"><path d="M10 2 L30 2 L30 10 L38 10 L38 28 L22 28 L22 10 L18 10 L18 28 L2 28 L2 10 L10 10 Z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                        </button>
+                        <button class="shape-preset-btn" data-shape="custom" title="Custom Shape">
+                            <svg viewBox="0 0 40 30"><polygon points="20,2 38,12 32,28 8,28 2,12" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                        </button>
+                    </div>
+
+                    <div class="shape-editor-container">
+                        <canvas id="shape-editor" width="240" height="200"></canvas>
+                        <div class="shape-editor-hint">Click to add points, drag to move, right-click to delete</div>
+                    </div>
+
+                    <div class="shape-actions">
+                        <button id="clear-shape" class="action-btn secondary small">Reset Shape</button>
+                    </div>
+                </div>
+
+                <div class="control-section">
                     <h3>Room Dimensions</h3>
-                    <div class="control-group">
-                        <label for="room-width">Width (m)</label>
-                        <input type="number" id="room-width" value="3" min="1" max="10" step="0.1">
-                        <input type="range" id="room-width-slider" min="1" max="10" step="0.1" value="3">
-                    </div>
-                    <div class="control-group">
-                        <label for="room-depth">Depth (m)</label>
-                        <input type="number" id="room-depth" value="2.5" min="1" max="10" step="0.1">
-                        <input type="range" id="room-depth-slider" min="1" max="10" step="0.1" value="2.5">
-                    </div>
                     <div class="control-group">
                         <label for="room-height">Height (m)</label>
                         <input type="number" id="room-height" value="2.4" min="2" max="4" step="0.1">
                         <input type="range" id="room-height-slider" min="2" max="4" step="0.1" value="2.4">
+                    </div>
+                    <div class="control-group">
+                        <label for="room-scale">Scale</label>
+                        <input type="number" id="room-scale" value="1" min="0.5" max="3" step="0.1">
+                        <input type="range" id="room-scale-slider" min="0.5" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="room-dimensions-display">
+                        <span id="room-area-display">Area: 7.5 m²</span>
                     </div>
                 </div>
 
@@ -72,7 +97,7 @@
             <div class="viewport-header">
                 <h1>Bathroom Design Tool</h1>
                 <div class="viewport-info">
-                    <span id="room-size-display">3.0m x 2.5m x 2.4m</span>
+                    <span id="room-size-display">Height: 2.4m | Area: 7.5 m²</span>
                     <span id="item-count">Items: 0</span>
                 </div>
             </div>
