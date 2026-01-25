@@ -349,6 +349,7 @@ class BathroomDesigner {
 
         // Furniture definitions
         this.furnitureTypes = {
+            wall: { width: 2.0, depth: 0.1, height: 2.4, color: 0xe8e4e0, icon: '🧱' },
             toilet: { width: 0.4, depth: 0.65, height: 0.45, color: 0xffffff, icon: '🚽' },
             sink: { width: 0.5, depth: 0.45, height: 0.85, color: 0xffffff, icon: '🚰' },
             bathtub: { width: 0.75, depth: 1.7, height: 0.55, color: 0xffffff, icon: '🛁' },
@@ -499,38 +500,13 @@ class BathroomDesigner {
         gridHelper.position.z = bounds.centerY;
         this.room.add(gridHelper);
 
-        // Create walls
-        const wallMaterial = new THREE.MeshStandardMaterial({
-            color: this.wallColor,
-            roughness: 0.9,
-            metalness: 0,
-            side: THREE.DoubleSide
-        });
-
-        for (let i = 0; i < scaledPoints.length; i++) {
-            const p1 = scaledPoints[i];
-            const p2 = scaledPoints[(i + 1) % scaledPoints.length];
-
-            const dx = p2.x - p1.x;
-            const dy = p2.y - p1.y;
-            const length = Math.sqrt(dx * dx + dy * dy);
-            const angle = Math.atan2(dy, dx);
-
-            const wallGeometry = new THREE.PlaneGeometry(length, this.roomHeight);
-            const wall = new THREE.Mesh(wallGeometry, wallMaterial.clone());
-
-            // Position at midpoint of edge
-            wall.position.x = (p1.x + p2.x) / 2;
-            wall.position.z = (p1.y + p2.y) / 2;
-            wall.position.y = this.roomHeight / 2;
-
-            // Rotate to face inward
-            wall.rotation.y = -angle + Math.PI / 2;
-
-            wall.receiveShadow = true;
-            wall.castShadow = true;
-            this.room.add(wall);
-        }
+        // Draw floor outline for visibility
+        const outlineMaterial = new THREE.LineBasicMaterial({ color: 0x3498db, linewidth: 2 });
+        const outlinePoints = scaledPoints.map(p => new THREE.Vector3(p.x, 0.01, p.y));
+        outlinePoints.push(outlinePoints[0].clone()); // Close the loop
+        const outlineGeometry = new THREE.BufferGeometry().setFromPoints(outlinePoints);
+        const outline = new THREE.Line(outlineGeometry, outlineMaterial);
+        this.room.add(outline);
 
         this.scene.add(this.room);
     }
@@ -593,6 +569,9 @@ class BathroomDesigner {
 
         // Create based on type
         switch(type) {
+            case 'wall':
+                this.createWall(group, config);
+                break;
             case 'toilet':
                 this.createToilet(group, config);
                 break;
@@ -638,6 +617,21 @@ class BathroomDesigner {
         this.updateItemCount();
 
         return group;
+    }
+
+    createWall(group, config) {
+        const material = new THREE.MeshStandardMaterial({
+            color: config.color,
+            roughness: 0.9,
+            metalness: 0
+        });
+
+        const geometry = new THREE.BoxGeometry(config.width, config.height, config.depth);
+        const wall = new THREE.Mesh(geometry, material);
+        wall.position.y = config.height / 2;
+        wall.castShadow = true;
+        wall.receiveShadow = true;
+        group.add(wall);
     }
 
     createToilet(group, config) {
@@ -1104,6 +1098,7 @@ class BathroomDesigner {
 
         // Rebuild
         switch(type) {
+            case 'wall': this.createWall(item, config); break;
             case 'toilet': this.createToilet(item, config); break;
             case 'sink': this.createSink(item, config); break;
             case 'bathtub': this.createBathtub(item, config); break;
