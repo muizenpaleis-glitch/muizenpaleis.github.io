@@ -3,74 +3,203 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Levensreis Tijdlijn - Chronicle of Life's Voyage</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Bathroom Design Tool - 3D Planner</title>
+    <link rel="stylesheet" href="bathroom-styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
-        <span class="toggle-icon">☰</span>
-    </button>
-
-    <aside id="sidebar" class="sidebar">
-        <div class="sidebar-content">
-            <h2>Nieuwe Mijlpaal</h2>
-            <p class="sidebar-subtitle">Toevoegen aan uw reis</p>
-
-            <form id="milestone-form">
-                <div class="form-group">
-                    <label for="milestone-title">Titel</label>
-                    <input type="text" id="milestone-title" placeholder="Bijvoorbeeld: Getrouwd" required>
+    <div class="app-container">
+        <!-- Left Sidebar - Room Settings -->
+        <aside class="sidebar left-sidebar">
+            <div class="sidebar-header">
+                <h2>Room Settings</h2>
+            </div>
+            <div class="sidebar-content">
+                <div class="control-section">
+                    <h3>Room Dimensions</h3>
+                    <div class="control-group">
+                        <label for="room-width">Width (m)</label>
+                        <input type="number" id="room-width" value="3" min="1" max="10" step="0.1">
+                        <input type="range" id="room-width-slider" min="1" max="10" step="0.1" value="3">
+                    </div>
+                    <div class="control-group">
+                        <label for="room-depth">Depth (m)</label>
+                        <input type="number" id="room-depth" value="2.5" min="1" max="10" step="0.1">
+                        <input type="range" id="room-depth-slider" min="1" max="10" step="0.1" value="2.5">
+                    </div>
+                    <div class="control-group">
+                        <label for="room-height">Height (m)</label>
+                        <input type="number" id="room-height" value="2.4" min="2" max="4" step="0.1">
+                        <input type="range" id="room-height-slider" min="2" max="4" step="0.1" value="2.4">
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="milestone-date">Datum</label>
-                    <input type="date" id="milestone-date" required>
+                <div class="control-section">
+                    <h3>Room Style</h3>
+                    <div class="control-group">
+                        <label for="wall-color">Wall Color</label>
+                        <input type="color" id="wall-color" value="#e8e4e0">
+                    </div>
+                    <div class="control-group">
+                        <label for="floor-color">Floor Color</label>
+                        <input type="color" id="floor-color" value="#8b7355">
+                    </div>
+                    <div class="control-group">
+                        <label for="tile-pattern">Floor Pattern</label>
+                        <select id="tile-pattern">
+                            <option value="solid">Solid</option>
+                            <option value="checkered">Checkered</option>
+                            <option value="tiles">Tiles</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="milestone-description">Beschrijving</label>
-                    <textarea id="milestone-description" placeholder="Voeg details toe..." rows="3"></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="milestone-category">Categorie</label>
-                    <select id="milestone-category">
-                        <option value="personal">Persoonlijk</option>
-                        <option value="career">Carrière</option>
-                        <option value="education">Onderwijs</option>
-                        <option value="family">Familie</option>
-                        <option value="property">Bezit</option>
-                        <option value="travel">Reis</option>
-                        <option value="achievement">Prestatie</option>
-                        <option value="other">Anders</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="milestone-color">Kleur</label>
-                    <input type="color" id="milestone-color" value="#d4b896">
-                </div>
-
-                <button type="submit" class="btn-primary">Toevoegen</button>
-            </form>
-        </div>
-    </aside>
-
-    <main class="main-content">
-        <header>
-            <h1>Levensreis Tijdlijn</h1>
-            <p>Met de stroom meegaan - Alle zeilen bijzetten</p>
-        </header>
-
-        <div class="timeline-section">
-            <div id="timeline-container" class="timeline">
-                <div class="empty-state">
-                    <p>Nog geen mijlpalen. Voeg uw eerste mijlpaal toe!</p>
+                <div class="control-section">
+                    <h3>View Controls</h3>
+                    <div class="view-buttons">
+                        <button class="view-btn" data-view="perspective">3D View</button>
+                        <button class="view-btn" data-view="top">Top View</button>
+                        <button class="view-btn" data-view="front">Front View</button>
+                        <button class="view-btn" data-view="side">Side View</button>
+                    </div>
+                    <button id="reset-camera" class="action-btn">Reset Camera</button>
                 </div>
             </div>
-        </div>
-    </main>
+        </aside>
 
-    <script src="script.js"></script>
+        <!-- Main 3D Viewport -->
+        <main class="viewport">
+            <div class="viewport-header">
+                <h1>Bathroom Design Tool</h1>
+                <div class="viewport-info">
+                    <span id="room-size-display">3.0m x 2.5m x 2.4m</span>
+                    <span id="item-count">Items: 0</span>
+                </div>
+            </div>
+            <div id="canvas-container">
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Loading 3D Environment...</p>
+                </div>
+            </div>
+            <div class="viewport-controls">
+                <div class="mouse-hints">
+                    <span>Left click: Select</span>
+                    <span>Right drag: Rotate view</span>
+                    <span>Scroll: Zoom</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar - Furniture & Properties -->
+        <aside class="sidebar right-sidebar">
+            <div class="sidebar-header">
+                <h2>Furniture</h2>
+            </div>
+            <div class="sidebar-content">
+                <div class="control-section">
+                    <h3>Add Items</h3>
+                    <div class="furniture-grid">
+                        <button class="furniture-btn" data-type="toilet">
+                            <div class="furniture-icon">🚽</div>
+                            <span>Toilet</span>
+                        </button>
+                        <button class="furniture-btn" data-type="sink">
+                            <div class="furniture-icon">🚰</div>
+                            <span>Sink</span>
+                        </button>
+                        <button class="furniture-btn" data-type="bathtub">
+                            <div class="furniture-icon">🛁</div>
+                            <span>Bathtub</span>
+                        </button>
+                        <button class="furniture-btn" data-type="shower">
+                            <div class="furniture-icon">🚿</div>
+                            <span>Shower</span>
+                        </button>
+                        <button class="furniture-btn" data-type="mirror">
+                            <div class="furniture-icon">🪞</div>
+                            <span>Mirror</span>
+                        </button>
+                        <button class="furniture-btn" data-type="cabinet">
+                            <div class="furniture-icon">🗄️</div>
+                            <span>Cabinet</span>
+                        </button>
+                        <button class="furniture-btn" data-type="towelrack">
+                            <div class="furniture-icon">🧺</div>
+                            <span>Towel Rack</span>
+                        </button>
+                        <button class="furniture-btn" data-type="plant">
+                            <div class="furniture-icon">🪴</div>
+                            <span>Plant</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Selected Item Properties -->
+                <div class="control-section" id="item-properties" style="display: none;">
+                    <h3>Selected Item</h3>
+                    <div class="property-display">
+                        <span class="property-label">Type:</span>
+                        <span id="selected-type">-</span>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Position X (m)</label>
+                        <input type="number" id="item-pos-x" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label>Position Z (m)</label>
+                        <input type="number" id="item-pos-z" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label>Rotation (°)</label>
+                        <input type="number" id="item-rotation" min="0" max="360" step="15">
+                        <input type="range" id="item-rotation-slider" min="0" max="360" step="15" value="0">
+                    </div>
+
+                    <h4>Resize</h4>
+                    <div class="control-group">
+                        <label>Width (m)</label>
+                        <input type="number" id="item-width" min="0.1" max="3" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label>Depth (m)</label>
+                        <input type="number" id="item-depth" min="0.1" max="3" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label>Height (m)</label>
+                        <input type="number" id="item-height" min="0.1" max="2" step="0.1">
+                    </div>
+
+                    <div class="control-group">
+                        <label>Color</label>
+                        <input type="color" id="item-color" value="#ffffff">
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="duplicate-item" class="action-btn secondary">Duplicate</button>
+                        <button id="delete-item" class="action-btn danger">Delete</button>
+                    </div>
+                </div>
+
+                <!-- Items List -->
+                <div class="control-section">
+                    <h3>Items List</h3>
+                    <div id="items-list" class="items-list">
+                        <p class="empty-state">No items added yet</p>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>Actions</h3>
+                    <button id="clear-all" class="action-btn danger">Clear All Items</button>
+                    <button id="save-design" class="action-btn">Save Design</button>
+                    <button id="load-design" class="action-btn secondary">Load Design</button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="bathroom-app.js"></script>
 </body>
 </html>

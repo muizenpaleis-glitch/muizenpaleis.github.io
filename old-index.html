@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Levensreis Tijdlijn - Chronicle of Life's Voyage</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+        <span class="toggle-icon">☰</span>
+    </button>
+
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-content">
+            <h2>Nieuwe Mijlpaal</h2>
+            <p class="sidebar-subtitle">Toevoegen aan uw reis</p>
+
+            <form id="milestone-form">
+                <div class="form-group">
+                    <label for="milestone-title">Titel</label>
+                    <input type="text" id="milestone-title" placeholder="Bijvoorbeeld: Getrouwd" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="milestone-date">Datum</label>
+                    <input type="date" id="milestone-date" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="milestone-description">Beschrijving</label>
+                    <textarea id="milestone-description" placeholder="Voeg details toe..." rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="milestone-category">Categorie</label>
+                    <select id="milestone-category">
+                        <option value="personal">Persoonlijk</option>
+                        <option value="career">Carrière</option>
+                        <option value="education">Onderwijs</option>
+                        <option value="family">Familie</option>
+                        <option value="property">Bezit</option>
+                        <option value="travel">Reis</option>
+                        <option value="achievement">Prestatie</option>
+                        <option value="other">Anders</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="milestone-color">Kleur</label>
+                    <input type="color" id="milestone-color" value="#d4b896">
+                </div>
+
+                <button type="submit" class="btn-primary">Toevoegen</button>
+            </form>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header>
+            <h1>Levensreis Tijdlijn</h1>
+            <p>Met de stroom meegaan - Alle zeilen bijzetten</p>
+        </header>
+
+        <div class="timeline-section">
+            <div id="timeline-container" class="timeline">
+                <div class="empty-state">
+                    <p>Nog geen mijlpalen. Voeg uw eerste mijlpaal toe!</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
