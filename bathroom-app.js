@@ -8,11 +8,12 @@ class ShapeEditor {
         this.ctx = canvas.getContext('2d');
         this.onChange = onChange;
 
+        // Resize canvas to match display size
+        this.resizeCanvas();
+
         // Points in meters (will be scaled for display)
         this.points = [];
         this.scale = 40; // pixels per meter
-        this.offsetX = 120;
-        this.offsetY = 100;
 
         // Interaction state
         this.selectedPoint = -1;
@@ -25,6 +26,18 @@ class ShapeEditor {
         }
 
         this.setupEvents();
+        window.addEventListener('resize', () => this.resizeCanvas());
+    }
+
+    resizeCanvas() {
+        const rect = this.canvas.getBoundingClientRect();
+        this.canvas.width = rect.width;
+        this.canvas.height = rect.height;
+        this.offsetX = rect.width / 2;
+        this.offsetY = rect.height / 2;
+        if (this.points.length > 0) {
+            this.draw();
+        }
     }
 
     setupEvents() {
