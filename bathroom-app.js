@@ -3,7 +3,7 @@
 
 // Shape Editor Class for 2D floor plan editing
 class ShapeEditor {
-    constructor(canvas, onChange) {
+    constructor(canvas, onChange, autoInit = true) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.onChange = onChange;
@@ -19,8 +19,10 @@ class ShapeEditor {
         this.isDragging = false;
         this.hoverPoint = -1;
 
-        // Set default rectangle shape
-        this.setPresetShape('rectangle');
+        // Set default rectangle shape only if autoInit is true
+        if (autoInit) {
+            this.setPresetShape('rectangle');
+        }
 
         this.setupEvents();
     }
@@ -388,11 +390,15 @@ class BathroomDesigner {
 
     setupShapeEditor() {
         const canvas = document.getElementById('shape-editor');
+        // Create shape editor without triggering onChange during construction
         this.shapeEditor = new ShapeEditor(canvas, (points) => {
             this.roomShape = points;
             this.createRoom();
             this.updateRoomSizeDisplay();
-        });
+        }, false); // Don't auto-initialize
+
+        // Now manually set the initial shape after shapeEditor is assigned
+        this.shapeEditor.setPresetShape('rectangle');
         this.roomShape = this.shapeEditor.getPoints();
     }
 
@@ -1382,6 +1388,7 @@ class BathroomDesigner {
     }
 
     updateRoomSizeDisplay() {
+        if (!this.shapeEditor) return; // Guard against early calls
         const area = this.shapeEditor.calculateArea() * this.roomScale * this.roomScale;
         document.getElementById('room-size-display').textContent =
             `Height: ${this.roomHeight.toFixed(1)}m | Area: ${area.toFixed(1)} m²`;
