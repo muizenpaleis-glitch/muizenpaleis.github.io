@@ -8,9 +8,6 @@ class ShapeEditor {
         this.ctx = canvas.getContext('2d');
         this.onChange = onChange;
 
-        // Resize canvas to match display size
-        this.resizeCanvas();
-
         // Points in meters (will be scaled for display)
         this.points = [];
         this.scale = 40; // pixels per meter
@@ -19,6 +16,11 @@ class ShapeEditor {
         this.selectedPoint = -1;
         this.isDragging = false;
         this.hoverPoint = -1;
+
+        // Set initial canvas size with fallback
+        this.offsetX = 120;
+        this.offsetY = 90;
+        this.resizeCanvas();
 
         // Set default rectangle shape only if autoInit is true
         if (autoInit) {
@@ -31,10 +33,15 @@ class ShapeEditor {
 
     resizeCanvas() {
         const rect = this.canvas.getBoundingClientRect();
-        this.canvas.width = rect.width;
-        this.canvas.height = rect.height;
-        this.offsetX = rect.width / 2;
-        this.offsetY = rect.height / 2;
+        // Use fallback if dimensions not available yet
+        const width = rect.width > 0 ? rect.width : 240;
+        const height = rect.height > 0 ? rect.height : 180;
+
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.offsetX = width / 2;
+        this.offsetY = height / 2;
+
         if (this.points.length > 0) {
             this.draw();
         }
