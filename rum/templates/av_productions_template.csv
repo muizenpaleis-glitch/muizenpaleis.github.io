@@ -1,0 +1,2 @@
+production_id;title;original_title;production_year;type;imdb_id;tmdb_id;eidr;country_of_origin;contained_work_ids;priority;country_filter;notes
+P-EXAMPLE-001;Example Film;Voorbeeldfilm;2023;film;tt1234567;550;;NL;W-EXAMPLE-001;normal;;remove this example row before importing
