@@ -39,7 +39,9 @@ FINDING_STATUSES = ("new", "reviewed", "false_positive", "exported")
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    """Naive UTC. Columns are TIMESTAMP WITHOUT TIME ZONE; values read
+    back from the DB are naive, so in-Python comparisons must be too."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def new_uuid() -> str:
@@ -239,6 +241,19 @@ class CollectorRun(Base):
     findings_suppressed: Mapped[int] = mapped_column(Integer, default=0)
     errors: Mapped[list] = mapped_column(JSON, default=list)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class VideoViewSnapshot(Base):
+    """Periodic view-count capture per tracked video, so the YouTube
+    collector can report view-count deltas per week (req. 4 source #2)."""
+
+    __tablename__ = "video_view_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    video_id: Mapped[str] = mapped_column(String(20), index=True)
+    watchlist_id: Mapped[str] = mapped_column(String(64), index=True)
+    view_count: Mapped[int] = mapped_column(Integer)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class ExportBatch(Base):

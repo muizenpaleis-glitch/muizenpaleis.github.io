@@ -6,6 +6,7 @@ written to disk by this module (req. 7).
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 
@@ -36,9 +37,27 @@ class Config:
 
     # Collector API keys (from environment).
     setlistfm_api_key: str | None = None
+    youtube_api_key: str | None = None
+    tmdb_api_key: str | None = None
 
-    # Per-module market lists, e.g. {"setlistfm": ["DE", "JP"]} (req. 7).
+    # Per-module enable/disable and market lists (req. 7).
+    # enabled_modules None means: all registered modules.
+    enabled_modules: list | None = None
+    # e.g. {"charts": ["DE", "JP"], "setlistfm": ["DE"]}
     module_markets: dict = field(default_factory=dict)
+
+    # Streaming charts source (req. 4 source #1). The access route is an
+    # open question (req. 12) - the URL template is configurable so the
+    # route chosen after the ToS assessment can be plugged in.
+    charts_url_template: str = (
+        "https://spotifycharts.com/regional/{market}/weekly/latest/download"
+    )
+    charts_source_name: str = "spotify-weekly-top200"
+
+    # Phase 3 alerting: notify when a high-priority watchlist item gets a
+    # high-confidence finding (req. 8 phase 3).
+    alert_min_confidence: float = 0.9
+    slack_webhook_url: str | None = None
 
     @property
     def user_agent(self) -> str:
@@ -63,4 +82,19 @@ class Config:
             os.environ.get("RUM_LEVEL3_THRESHOLD", cfg.level3_threshold)
         )
         cfg.setlistfm_api_key = os.environ.get("SETLISTFM_API_KEY")
+        cfg.youtube_api_key = os.environ.get("YOUTUBE_API_KEY")
+        cfg.tmdb_api_key = os.environ.get("TMDB_API_KEY")
+        enabled = os.environ.get("RUM_ENABLED_MODULES", "").strip()
+        if enabled:
+            cfg.enabled_modules = [m.strip() for m in enabled.split(",") if m.strip()]
+        markets_json = os.environ.get("RUM_MODULE_MARKETS", "").strip()
+        if markets_json:
+            cfg.module_markets = json.loads(markets_json)
+        cfg.charts_url_template = os.environ.get(
+            "RUM_CHARTS_URL_TEMPLATE", cfg.charts_url_template
+        )
+        cfg.alert_min_confidence = float(
+            os.environ.get("RUM_ALERT_MIN_CONFIDENCE", cfg.alert_min_confidence)
+        )
+        cfg.slack_webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
         return cfg

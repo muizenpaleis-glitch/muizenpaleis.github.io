@@ -10,12 +10,13 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from . import alerts
 from .collectors import REGISTRY, CollectorContext
 from .config import Config
 from .evidence import EvidenceStore
 from .findings import RecordOutcome, record_finding
 from .matching import MatchingEngine
-from .models import CollectorRun, WatchlistEntry, utcnow
+from .models import CollectorRun, Finding, WatchlistEntry, utcnow
 from .ratelimit import RateLimiter
 
 logger = logging.getLogger("rum.runner")
@@ -24,6 +25,7 @@ logger = logging.getLogger("rum.runner")
 @dataclass
 class RunReport:
     runs: list[CollectorRun] = field(default_factory=list)
+    alerts: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         lines = ["Run report:"]
@@ -37,6 +39,8 @@ class RunReport:
             )
             for err in r.errors:
                 lines.append(f"    error: {err}")
+        for alert in self.alerts:
+            lines.append(f"  ALERT: {alert}")
         return "\n".join(lines)
 
 
@@ -55,8 +59,10 @@ def run_collectors(
     engine = MatchingEngine(config)
     evidence_store = EvidenceStore(config.evidence_dir)
     report = RunReport()
+    new_findings: list[Finding] = []
 
-    names = modules or sorted(REGISTRY)
+    # Per-module enable/disable (req. 7): explicit modules > config > all.
+    names = modules or config.enabled_modules or sorted(REGISTRY)
     watchlist = (
         session.query(WatchlistEntry).filter(WatchlistEntry.active.is_(True)).all()
     )
@@ -71,7 +77,7 @@ def run_collectors(
                 limiter=limiter, http_client_factory=http_client_factory,
             )
             collector = REGISTRY[name](context)
-            run = CollectorRun(module=name, market=market)
+            run = CollectorRun(module=name, market=market, ok=True)
             session.add(run)
             wl_slice = [
                 e for e in watchlist if e.entity_type in collector.entity_types
@@ -79,9 +85,10 @@ def run_collectors(
             try:
                 drafts = collector.collect(wl_slice, market, since)
                 for draft in drafts:
-                    outcome, _ = record_finding(session, draft, evidence_store)
+                    outcome, finding = record_finding(session, draft, evidence_store)
                     if outcome is RecordOutcome.CREATED:
                         run.findings_new += 1
+                        new_findings.append(finding)
                     elif outcome is RecordOutcome.DUPLICATE:
                         run.findings_duplicate += 1
                     else:
@@ -100,5 +107,7 @@ def run_collectors(
                 run.findings_duplicate, run.findings_suppressed, len(run.errors),
             )
             report.runs.append(run)
+    # Phase 3 alerting: high-priority watchlist + high-confidence finding.
+    report.alerts = alerts.notify_new_findings(session, config, new_findings)
     session.commit()
     return report

@@ -22,10 +22,12 @@ from urllib.parse import quote
 from fastapi import FastAPI, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from . import demodata, findings as findings_mod, watchlist as watchlist_mod
+from . import demodata, enrich as enrich_mod, findings as findings_mod, watchlist as watchlist_mod
+from .collectors import REGISTRY
 from .config import Config
 from .db import init_db, make_engine, make_session_factory
 from .export import export_findings
+from .findings import week_period
 from .models import (
     ENTITY_TYPES,
     USAGE_TYPES,
@@ -140,17 +142,56 @@ def create_app(config: Config | None = None) -> FastAPI:
                 ("collector runs", run_count),
             ]
         )
+        chart_html = _findings_per_market_chart()
         body = f"""
         <div class="cards">{cards}</div>
         <div class="card">
           <h2 style="margin-top:0">Quick test setup</h2>
-          <p class="muted">Seeds 3 demo watchlist entries (a work, a performer with a
-          known-works subset, one without). Then use <b>Run collectors</b> with demo
-          mode checked - no API key or network needed.</p>
+          <p class="muted">Seeds 4 demo watchlist entries (a work, an AV production,
+          a performer with a known-works subset, one without). Then use
+          <b>Run collectors</b> with demo mode checked - no API key or network needed.</p>
           <form method="post" action="/demo/seed"><button>Seed demo watchlist</button></form>
+        </div>
+        <div class="card">
+          <h2 style="margin-top:0">Findings per market per week</h2>
+          {chart_html}
         </div>
         """
         return page("Dashboard", body, flash)
+
+    def _findings_per_market_chart() -> str:
+        """Server-rendered chart (req. 8 phase 2): counts per market for
+        the most recent 8 weeks with findings."""
+        with db() as s:
+            findings = s.query(Finding.period, Finding.market).all()
+        counts: dict[tuple[str, str], int] = {}
+        for period, market in findings:
+            if "-W" in period:
+                week = period
+            else:
+                try:
+                    week = week_period(date.fromisoformat(period))
+                except ValueError:
+                    continue
+            counts[(week, market)] = counts.get((week, market), 0) + 1
+        if not counts:
+            return '<p class="muted">No findings yet.</p>'
+        weeks = sorted({w for w, _ in counts}, reverse=True)[:8]
+        markets = sorted({m for _, m in counts})
+        peak = max(counts.values())
+        header = "".join(f"<th>{e(m)}</th>" for m in markets)
+        rows = ""
+        for week in weeks:
+            cells = ""
+            for m in markets:
+                n = counts.get((week, m), 0)
+                bar = (
+                    f'<div style="background:#4a6fb5;height:8px;'
+                    f'width:{max(4, int(100 * n / peak))}%"></div>' if n else ""
+                )
+                cells += f"<td>{n or ''}{bar}</td>"
+            rows += f"<tr><th>{e(week)}</th>{cells}</tr>"
+        return f"<table><tr><th>Week</th>{header}</tr>{rows}</table>"
 
     @app.post("/demo/seed")
     def demo_seed():
@@ -293,26 +334,56 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.get("/run", response_class=HTMLResponse)
     def run_form(flash: str | None = None):
         default_since = (date.today() - timedelta(days=30)).isoformat()
-        key_state = "set" if config.setlistfm_api_key else "NOT set"
+        keys = {
+            "SETLISTFM_API_KEY": config.setlistfm_api_key,
+            "YOUTUBE_API_KEY": config.youtube_api_key,
+            "TMDB_API_KEY": config.tmdb_api_key,
+        }
+        key_state = ", ".join(
+            f"{name} {'set' if value else 'NOT set'}" for name, value in keys.items()
+        )
+        module_options = "".join(
+            f'<option value="{m}">{m}</option>' for m in sorted(REGISTRY)
+        )
         body = f"""
         <div class="card">
           <form method="post" action="/run">
-            <label>Module <select name="module"><option value="setlistfm">setlistfm</option></select></label>
+            <label>Module <select name="module">
+              <option value="">all enabled modules</option>{module_options}
+            </select></label>
             <label>Market (ISO code, empty = all) <input name="market" size="4" maxlength="2"></label>
             <label>Since <input type="date" name="since" value="{default_since}"></label>
             <label><input type="checkbox" name="demo" value="1" checked>
-              demo mode (bundled fake setlist.fm responses, no network)</label>
+              demo mode (bundled fake API responses, no network)</label>
             <button>Start run</button>
           </form>
-          <p class="muted">SETLISTFM_API_KEY is {key_state}. Uncheck demo mode to hit the
-          real API (rate-limited to 1 request / {config.rate_limit_seconds:g}s per domain).</p>
+          <p class="muted">{key_state}. Uncheck demo mode to hit the real APIs
+          (rate-limited to 1 request / {config.rate_limit_seconds:g}s per domain).
+          The charts module needs a market (a chart is per country).</p>
+        </div>
+        <div class="card">
+          <h2 style="margin-top:0">MusicBrainz enrichment</h2>
+          <p class="muted">Not a usage source: resolves performer aliases and
+          ISRC canonical titles to strengthen matching (req. 4 source #5).</p>
+          <form method="post" action="/enrich">
+            <label><input type="checkbox" name="demo" value="1" checked> demo mode</label>
+            <button>Run enrichment</button>
+          </form>
         </div>
         """
         return page("Run collectors", body, flash)
 
+    @app.post("/enrich")
+    def enrich_post(demo: str = Form("")):
+        factory = demodata.demo_http_client_factory if demo else None
+        with db() as s:
+            messages = enrich_mod.enrich_all(s, config, client_factory=factory)
+            s.commit()
+        return redirect("/run", "\n".join(messages) or "enrichment: nothing to add")
+
     @app.post("/run")
     def run_post(
-        module: str = Form("setlistfm"),
+        module: str = Form(""),
         market: str = Form(""),
         since: str = Form(""),
         demo: str = Form(""),
@@ -323,11 +394,17 @@ def create_app(config: Config | None = None) -> FastAPI:
         if demo:
             factory = demodata.demo_http_client_factory
             run_config = dataclasses.replace(
-                config, setlistfm_api_key="demo-key", rate_limit_seconds=0.0
+                config,
+                setlistfm_api_key="demo-key",
+                youtube_api_key="demo-key",
+                tmdb_api_key="demo-key",
+                rate_limit_seconds=0.0,
+                # A chart is per country; give the demo a market list.
+                module_markets={**config.module_markets, "charts": ["DE"]},
             )
         with db() as s:
             report = run_collectors(
-                s, run_config, modules=[module],
+                s, run_config, modules=[module] if module else None,
                 markets=[market.upper()] if market.strip() else None,
                 since=since_date, http_client_factory=factory,
             )

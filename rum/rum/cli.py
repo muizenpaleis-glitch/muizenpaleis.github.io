@@ -18,6 +18,7 @@ from datetime import date, datetime
 
 import typer
 
+from . import enrich as enrich_mod
 from . import export as export_mod
 from . import findings as findings_mod
 from . import watchlist as watchlist_mod
@@ -161,6 +162,16 @@ def list_findings(
             f"{f.finding_id}\t{f.period}\t{f.market}\t{f.usage_type}\t"
             f"{f.watchlist_id}\tL{f.match_level}/{f.confidence}\t{f.status}"
         )
+
+
+@app.command()
+def enrich():
+    """MusicBrainz enrichment: resolve performer aliases and ISRC
+    canonical titles to strengthen matching (req. 4 source #5)."""
+    config, session = _session()
+    messages = enrich_mod.enrich_all(session, config)
+    session.commit()
+    typer.echo("\n".join(messages) or "enrichment: nothing to add")
 
 
 @app.command()

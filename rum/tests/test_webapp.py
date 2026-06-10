@@ -27,21 +27,52 @@ def test_full_demo_flow(client):
     response = client.get("/watchlist")
     assert "DEMO-W-001" in response.text and "DEMO-A-002" in response.text
 
-    # 2. Run the setlist.fm collector in demo mode (no network).
+    # 2. Run ALL collectors in demo mode (no network, no API keys).
     response = client.post(
-        "/run", data={"module": "setlistfm", "market": "", "since": "", "demo": "1"}
+        "/run", data={"module": "", "market": "", "since": "", "demo": "1"}
     )
-    assert "new findings" in response.text
-    assert "0 errors" in response.text
+    assert "error:" not in response.text
+    # The run report must show every module actually executed.
+    for line in ("setlistfm [all markets]", "charts [DE]",
+                 "tmdb [all markets]", "youtube [all markets]"):
+        assert line in response.text, f"missing run report line: {line}"
+    # The high-priority demo work scores >= 0.9 -> phase 3 alert in report.
+    assert "ALERT" in response.text and "DEMO-W-001" in response.text
 
-    # 3. Findings list with a market filter.
-    response = client.get("/findings", params={"market": "DE"})
-    assert "live_performance" in response.text and "DEMO-W-001" in response.text
+    # 2b. Re-run in a fresh request session: idempotent, no errors
+    # (regression: snapshots read back from the DB are tz-naive).
+    response = client.post(
+        "/run", data={"module": "", "market": "", "since": "", "demo": "1"}
+    )
+    assert "error:" not in response.text
+    assert "0 new findings" in response.text
+
+    # 3. Findings from every module (filter by usage type, check the
+    # table rows - not the filter dropdown).
+    for usage, expected_id in [
+        ("live_performance", "DEMO-W-001"),
+        ("streaming_chart", "DEMO-W-001"),
+        ("video_views", "DEMO-W-001"),
+        ("vod_availability", "DEMO-P-001"),
+    ]:
+        listing = client.get("/findings", params={"usage_type": usage}).text
+        assert f'href="/watchlist/{expected_id}"' in listing, usage
     response = client.get("/findings", params={"market": "ES"})
     assert "DEMO-A-002" in response.text
 
+    # 3b. Dashboard now renders the findings-per-market-per-week chart.
+    response = client.get("/")
+    assert "Findings per market per week" in response.text
+    assert "<th>DE</th>" in response.text
+
+    # 3c. MusicBrainz enrichment in demo mode.
+    response = client.post("/enrich", data={"demo": "1"})
+    assert "alias" in response.text
+
     # 4. Finding detail shows matched strings + evidence snapshot.
-    finding_id = _first_finding_id(client, market="DE")
+    finding_id = _first_finding_id(
+        client, market="DE", usage_type="live_performance"
+    )
     response = client.get(f"/findings/{finding_id}")
     assert "Matched strings" in response.text
     assert "Columbiahalle" in response.text  # from the evidence JSON
@@ -87,11 +118,11 @@ def test_watchlist_import_and_crud(client):
     assert "deleted W-UI-1" in response.text
 
 
-def _first_finding_id(client, market):
+def _first_finding_id(client, **params):
     # The finding detail links carry the full UUID in the href.
     import re
 
-    listing = client.get("/findings", params={"market": market}).text
+    listing = client.get("/findings", params=params).text
     match = re.search(r'href="/findings/([0-9a-f-]{36})"', listing)
     assert match, "no finding link found"
     return match.group(1)

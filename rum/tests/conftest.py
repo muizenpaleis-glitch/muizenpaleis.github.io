@@ -11,7 +11,7 @@ import pytest
 
 from rum.config import Config
 from rum.db import init_db, make_engine, make_session_factory
-from rum.models import Performer, WatchlistEntry, Work, WorkRecording
+from rum.models import AvProduction, Performer, WatchlistEntry, Work, WorkRecording
 
 MBID_VOORBEELDEN = "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
 SINCE = date(2026, 5, 1)
@@ -69,6 +69,8 @@ def config(tmp_path) -> Config:
         evidence_dir=str(tmp_path / "evidence"),
         rate_limit_seconds=0.0,  # keep tests fast; AC6 tests use a real interval
         setlistfm_api_key="test-key",
+        youtube_api_key="test-key",
+        tmdb_api_key="test-key",
         contact_email="claims@cmo-test.nl",
     )
 
@@ -111,7 +113,14 @@ def seeded_session(session):
         id="A-002", entity_type="performer", display_name="Other Band"
     )
     performer_unknown.performer = Performer(known_work_ids=[])
-    session.add_all([work_entry, performer_known, performer_unknown])
+    production = WatchlistEntry(
+        id="P-001", entity_type="av_production", display_name="Voorbeeldfilm"
+    )
+    production.av_production = AvProduction(
+        original_title="Voorbeeldfilm", production_year=2023,
+        production_type="film", tmdb_id="550",
+    )
+    session.add_all([work_entry, performer_known, performer_unknown, production])
     session.commit()
     return session
 

@@ -50,6 +50,12 @@ class FindingDraft:
         )
 
 
+def week_period(d: date) -> str:
+    """ISO week label (e.g. 2026-W23) for weekly usage signals."""
+    iso = d.isocalendar()
+    return f"{iso[0]}-W{iso[1]:02d}"
+
+
 class RecordOutcome(Enum):
     CREATED = "created"
     DUPLICATE = "duplicate"
