@@ -164,6 +164,17 @@ def list_findings(
 
 
 @app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1"),
+    port: int = typer.Option(8000),
+):
+    """Start the web UI (rum/webapp.py)."""
+    import uvicorn
+
+    uvicorn.run("rum.webapp:app", host=host, port=port)
+
+
+@app.command()
 def mark_false_positive(finding_id: str):
     """Review action: mark a finding as false positive; the source-item /
     watchlist pair is suppressed in future runs (req. 5)."""

@@ -30,10 +30,18 @@ See the requirements document for full scope.
   backoff, honest User-Agent, idempotent runs via dedupe keys, per-run
   logs, and CSV export with export batches (req. §8 phase 1).
 
+- **Web UI** (`rum/webapp.py`, FastAPI, server-rendered) — covers every
+  function for testing: watchlist CSV import & CRUD, collection runs,
+  findings table with filters, finding detail with matched-strings
+  audit and the evidence snapshot, review actions (confirm /
+  false positive), run log, and CSV export download. A **demo mode**
+  seeds sample watchlist entries and runs the setlist.fm collector
+  against bundled fake API responses, so the whole pipeline can be
+  tested without an API key or network access.
+
 Not in this iteration: the chart, YouTube, TMDb and MusicBrainz
 collectors (acceptance criterion 2 is therefore only verifiable for the
-setlist-match part), Tier 2 country modules, scheduling, and the
-dashboard.
+setlist-match part), Tier 2 country modules, and scheduling.
 
 ## Setup
 
@@ -64,7 +72,19 @@ rum list-watchlist --active-only
 rum set-active W-001 --inactive
 ```
 
-## Running a collection
+## Web UI
+
+```bash
+rum serve            # http://127.0.0.1:8000
+```
+
+To test without a setlist.fm API key: on the **Dashboard** click
+*Seed demo watchlist*, then on **Run collectors** start a run with
+*demo mode* checked. Findings, review actions, the run log and the CSV
+export then all work on the demo data. Uncheck demo mode (with
+`SETLISTFM_API_KEY` set) to collect from the real API.
+
+## Running a collection (CLI)
 
 ```bash
 rum run --module setlistfm --market DE --since 2026-06-01
