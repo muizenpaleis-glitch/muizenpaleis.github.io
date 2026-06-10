@@ -1,0 +1,2 @@
+performer_id;artist_name;aliases;musicbrainz_id;setlistfm_artist_id;known_work_ids;priority;country_filter;notes
+A-EXAMPLE-001;De Voorbeelden;The Examples;b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d;;W-EXAMPLE-001;normal;DE|ES;remove this example row before importing
