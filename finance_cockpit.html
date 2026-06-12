@@ -63,9 +63,9 @@
       <div id="kpi-spend-sub" class="text-[11px] text-slate-500 mt-0.5"></div>
     </div>
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <div class="text-[11px] uppercase tracking-wider text-slate-500">Budget deviation → ΔSavings / yr</div>
+      <div class="text-[11px] uppercase tracking-wider text-slate-500">Budget deviation (loaded months)</div>
       <div id="kpi-delta" class="text-lg font-bold mt-1">—</div>
-      <div class="text-[11px] text-slate-500 mt-0.5">permanently tilts the projection angle</div>
+      <div class="text-[11px] text-slate-500 mt-0.5">shifts this year's result; future years follow plan</div>
     </div>
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div class="text-[11px] uppercase tracking-wider text-slate-500">Incidental projects (triaged)</div>
@@ -87,8 +87,8 @@
   <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div class="flex items-center justify-between mb-2">
-        <h2 class="font-semibold text-white">Net worth projection — linear compounding</h2>
-        <span class="text-[11px] text-slate-500">Recurring deviations tilt the line; incidentals dent it in their year</span>
+        <h2 class="font-semibold text-white">Net worth projection — MJP Netto Resultaat</h2>
+        <span class="text-[11px] text-slate-500">Loaded months adjust their own year; incidental overruns beyond plan dent further</span>
       </div>
       <div class="relative h-80"><canvas id="chart-projection"></canvas></div>
     </div>
@@ -96,11 +96,11 @@
       <h2 class="font-semibold text-white">Projection variables <span class="text-[11px] font-normal text-slate-500">(persisted in localStorage)</span></h2>
       <div class="grid grid-cols-2 gap-3 text-sm">
         <label class="block">
-          <span class="text-[11px] text-slate-400">Start net worth 2026 (€)</span>
+          <span class="text-[11px] text-slate-400">Start position 2026 (€)</span>
           <input id="set-startNetWorth" type="number" step="100" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100">
         </label>
         <label class="block">
-          <span class="text-[11px] text-slate-400">Return on capital (%/yr)</span>
+          <span class="text-[11px] text-slate-400">Return after 2031 (%/yr)</span>
           <input id="set-returnRate" type="number" step="0.1" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100">
         </label>
         <label class="block">
@@ -120,14 +120,11 @@
           <input id="set-threshold" type="number" step="10" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100">
         </label>
       </div>
-      <label class="flex items-center gap-2 text-sm text-slate-300">
-        <input id="set-includePlanned" type="checkbox" class="accent-cyan-500">
-        Include planned MJP incidentals (car €30k '30, bathroom €12k '27, dakkapel €15k '31, …)
-      </label>
       <p class="text-[11px] leading-relaxed text-slate-500">
-        Threshold derivation: recurring budget €5.323/mo ÷ 30,4 days ≈ €175/day baseline × 1,15 buffer ≈ <b>€200</b>.
-        Baseline savings per year come from the MJP operational result (2026 €21.741 → 2031 €27.038), then grow at the rate above.
-        Model: NW<sub>y+1</sub> = NW<sub>y</sub>·(1+r) + S<sub>y</sub> + ΔS − incidentals<sub>y</sub>.
+        The plan line is the MJP row "2. Netto Resultaat" taken literally: start €34.079 → €17.589 (2026) → €35.848 (2031),
+        incidentals already included. Beyond 2031 it extends with the operational result (+growth above) minus "onvoorzien".
+        Actual = plan, where loaded months replace the budget for their own year and incidental spend only counts
+        when it exceeds the planned yearly total. Threshold derivation: €5.323/mo ÷ 30,4 days ≈ €175/day × 1,15 ≈ <b>€200</b>.
       </p>
     </div>
   </section>
@@ -152,9 +149,6 @@
     </div>
     <p class="text-[11px] text-slate-500 mb-4">Live total of every transaction triaged as <span class="text-orange-400 font-semibold">[Incidental Project]</span>, grouped by sub-project, against the planned budget from your multi-year plan. Refunds reduce the spent amount.</p>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="inc-tracker"></div>
-    <div class="mt-5">
-      <div class="relative h-64"><canvas id="chart-incidental"></canvas></div>
-    </div>
   </section>
 
   <!-- Manage projects -->
@@ -217,8 +211,8 @@
   <footer class="text-[11px] text-slate-600 pb-8">
     Data, triage corrections and projection variables persist in this browser's localStorage. Upload new ASN exports
     (transactiehistorie_*.csv) at any time — duplicates are de-duplicated by date + sequence number + amount.
-    Note: the MJP already plans €11.000 Warmtepomp in 2026; if you also triage the Heattransformers payments as incidental,
-    untick "Include planned MJP incidentals" or accept the overlap.
+    Incidental spend counts toward the planned MJP yearly totals (e.g. the €2.000 Heattransformers payment consumes part of
+    the €26.931 planned for 2026) — only spending beyond the planned total dents the projection.
   </footer>
 </main>
 
@@ -378,12 +372,18 @@ const SAMPLE_CSV = `01-05-2026,NL06ASNB8851233594,,,,,,EUR,767.37,EUR,-16.22,01-
 // Jaarbegroting: recurring outflow €63.336,80/yr = €5.323,49/mo
 const MONTHLY_RECURRING_BUDGET = 5323.49;
 
-// MJP "1. Operationeel Resultaat" per year — the baseline annual savings S_y
+// MJP "1. Operationeel Resultaat" per year — annual savings S_y, used to extend the plan beyond 2031
 const BASE_SAVINGS = { 2026: 21741, 2027: 6250, 2028: 8780, 2029: 22996, 2030: 25045, 2031: 27038 };
 
-// MJP "Totaal incidentieel" per year — planned one-time capital deductions
+// MJP "Totaal incidentieel" per year — the planned incidental budget that triaged
+// incidental spend consumes; only overruns beyond these dent the projection
 const PLANNED_INCIDENTALS = { 2026: 26931, 2027: 14000, 2028: 4900, 2029: 2450, 2030: 33500, 2031: 17000 };
 const PLANNED_INCIDENTAL_TAIL = 2000; // "Onvoorzien" beyond the MJP horizon
+
+// MJP row "2. Netto Resultaat" — the expected net worth at each year-end, taken
+// literally from the sheet (start position €34.079, year values incl. incidentals)
+const PLAN_START_NET_WORTH = 34079;
+const PLAN_NET_WORTH = { 2026: 17589.24, 2027: 9839.42, 2028: 13718.98, 2029: 34265.29, 2030: 25810.25, 2031: 35848.18 };
 
 const PROJECTION_START_YEAR = 2026;
 
@@ -412,21 +412,31 @@ const HW_TERMS = /(KARWEI|BAUHAUS|HUBO|GAMMA|PRAXIS|HORNBACH|BOUWMAAT|TOOLSTATIO
 const HW_BANK_CATS = ['Klussen & onderhoud', 'Huishouden & elektronica'];
 
 const DEFAULT_SETTINGS = {
-  startNetWorth: 77989,        // MJP "Totaal vermogen" 2026
-  returnRate: 4,               // % expected return on invested capital
+  startNetWorth: PLAN_START_NET_WORTH, // MJP start position; changing it shifts the whole line
+  returnRate: 0,               // % return applied beyond 2031 only (the sheet assumes none)
   horizon: 15,                 // years
   savingsGrowth: 2,            // % growth of S_y beyond 2031 (MJP inflation factor)
   monthlyBudget: MONTHLY_RECURRING_BUDGET,
-  threshold: 200,              // €5.323/mo ÷ 30,4 ≈ €175/day × 1,15 ≈ €200
-  includePlanned: true
+  threshold: 200               // €5.323/mo ÷ 30,4 ≈ €175/day × 1,15 ≈ €200
 };
 
-const LS_KEYS = { settings: 'fc.settings.v1', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v1' };
+const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v1' };
 
 /* ================================================================
    3. STATE + PERSISTENCE
    ================================================================ */
-let settings = loadJSON(LS_KEYS.settings) || { ...DEFAULT_SETTINGS };
+let settings = loadJSON(LS_KEYS.settings);
+if (!settings) {
+  // Migrate v1 settings: keep filters/sort, but reset the projection variables —
+  // the model changed from independent compounding to the sheet's Netto Resultaat row
+  const v1 = loadJSON('fc.settings.v1');
+  if (v1) {
+    settings = { ...v1, startNetWorth: DEFAULT_SETTINGS.startNetWorth, returnRate: DEFAULT_SETTINGS.returnRate };
+    delete settings.includePlanned;
+  } else {
+    settings = { ...DEFAULT_SETTINGS };
+  }
+}
 let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
 let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
@@ -573,7 +583,7 @@ function effective(t) {
 function aggregate(txList) {
   const list = txList || transactions;
   const agg = {
-    months: new Set(),
+    months: new Set(), monthsByYear: {}, recurringSpendByYear: {},
     recurringIncome: 0, recurringSpend: 0,
     incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
     excludedTotal: 0,
@@ -584,6 +594,7 @@ function aggregate(txList) {
     const month = t.date.slice(0, 7);
     const year = parseInt(t.date.slice(0, 4), 10);
     agg.months.add(month);
+    (agg.monthsByYear[year] = agg.monthsByYear[year] || new Set()).add(month);
 
     if (e.cls === 'exclude') {
       agg.excludedTotal += Math.abs(t.amount);
@@ -604,15 +615,24 @@ function aggregate(txList) {
       agg.incidentalCount++;
     } else { // recurring
       if (t.amount > 0) agg.recurringIncome += t.amount;
-      else agg.recurringSpend += -t.amount;
+      else {
+        agg.recurringSpend += -t.amount;
+        agg.recurringSpendByYear[year] = (agg.recurringSpendByYear[year] || 0) - t.amount;
+      }
     }
   }
   agg.monthCount = Math.max(agg.months.size, 1);
   agg.spendPerMonth = agg.recurringSpend / agg.monthCount;
   agg.incomePerMonth = agg.recurringIncome / agg.monthCount;
-  // Positive deviation = spending below budget = extra annual savings (steeper line)
-  agg.deviationMonthly = settings.monthlyBudget - agg.spendPerMonth;
-  agg.deltaSavingsAnnual = agg.deviationMonthly * 12;
+  // Per year: positive = spent below budget over the loaded months of that year.
+  // Applied only to that year's result; future years follow the plan again.
+  agg.deviationByYear = {};
+  agg.deviationTotal = 0;
+  for (const y in agg.monthsByYear) {
+    const d = agg.monthsByYear[y].size * settings.monthlyBudget - (agg.recurringSpendByYear[y] || 0);
+    agg.deviationByYear[y] = d;
+    agg.deviationTotal += d;
+  }
   return agg;
 }
 
@@ -660,8 +680,15 @@ function activePeriodLabel() {
 }
 
 /* ================================================================
-   7. LINEAR COMPOUNDING PROJECTION MODEL
-   NW_{y+1} = NW_y * (1 + r) + S_y [+ ΔS] − incidentals_y
+   7. PROJECTION MODEL
+   Plan = the MJP row "2. Netto Resultaat" taken literally for
+   2026–2031, then extended: NR_y = NR_{y-1}·(1+r) + S_y − I_y.
+   Actual = plan, plus per-year adjustments from the loaded data:
+   - budget deviation of loaded months shifts that year's result
+     (the level shift carries forward — spent money stays gone —
+     but the slope returns to plan)
+   - triaged incidentals consume the planned incidental budget;
+     only the overrun beyond plan is an extra deduction
    ================================================================ */
 function baseSavingsForYear(year) {
   if (BASE_SAVINGS[year] !== undefined) return BASE_SAVINGS[year];
@@ -670,26 +697,31 @@ function baseSavingsForYear(year) {
   return BASE_SAVINGS[lastYear] * growth;
 }
 function plannedIncidentalForYear(year) {
-  if (!settings.includePlanned) return 0;
   if (PLANNED_INCIDENTALS[year] !== undefined) return PLANNED_INCIDENTALS[year];
   const growth = Math.pow(1 + settings.savingsGrowth / 100, year - 2031);
   return PLANNED_INCIDENTAL_TAIL * growth;
 }
 
-function projectNetWorth(agg, withTriage) {
+function projectSeries(agg) {
+  const offset = settings.startNetWorth - PLAN_START_NET_WORTH; // shift if your real start differs from the sheet
   const r = settings.returnRate / 100;
-  let nw = settings.startNetWorth;
-  const points = [nw];
+  const plan = [PLAN_START_NET_WORTH + offset];
+  const actual = [PLAN_START_NET_WORTH + offset];
+  let planNw = PLAN_START_NET_WORTH;
+  let cumDelta = 0;
   for (let i = 0; i < settings.horizon; i++) {
     const year = PROJECTION_START_YEAR + i;
-    let savings = baseSavingsForYear(year);
-    if (withTriage) savings += agg.deltaSavingsAnnual;
-    let incidentals = plannedIncidentalForYear(year);
-    if (withTriage) incidentals += (agg.incidentalNetByYear[year] || 0);
-    nw = nw * (1 + r) + savings - incidentals;
-    points.push(nw);
+    if (PLAN_NET_WORTH[year] !== undefined) planNw = PLAN_NET_WORTH[year];
+    else planNw = planNw * (1 + r) + baseSavingsForYear(year) - plannedIncidentalForYear(year);
+
+    const deviation = agg.deviationByYear[year] || 0;
+    const overrun = Math.max(0, (agg.incidentalNetByYear[year] || 0) - plannedIncidentalForYear(year));
+    cumDelta += deviation - overrun;
+
+    plan.push(planNw + offset);
+    actual.push(planNw + offset + cumDelta);
   }
-  return points;
+  return { plan, actual };
 }
 
 /* ================================================================
@@ -711,9 +743,9 @@ Chart.defaults.font.family = 'ui-sans-serif, system-ui, sans-serif';
 const chartProjection = new Chart(document.getElementById('chart-projection'), {
   type: 'line',
   data: { labels: [], datasets: [
-    { label: 'Plan (MJP baseline)', data: [], borderColor: '#475569', backgroundColor: 'rgba(71,85,105,.08)',
+    { label: 'Plan (MJP Netto Resultaat)', data: [], borderColor: '#475569', backgroundColor: 'rgba(71,85,105,.08)',
       borderDash: [6, 4], pointRadius: 0, tension: 0.15, fill: true },
-    { label: 'Actual (incl. triage)', data: [], borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,.10)',
+    { label: 'Actual (incl. loaded data)', data: [], borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,.10)',
       pointRadius: 2, pointBackgroundColor: '#22d3ee', tension: 0.15, fill: true }
   ]},
   options: {
@@ -746,18 +778,6 @@ const chartCashflow = new Chart(document.getElementById('chart-cashflow'), {
     scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(1) + 'k' } } } }
 });
 
-const chartIncidental = new Chart(document.getElementById('chart-incidental'), {
-  type: 'bar',
-  data: { labels: [], datasets: [
-    { label: 'Planned budget', data: [], backgroundColor: 'rgba(71,85,105,.6)', borderRadius: 4 },
-    { label: 'Actually spent', data: [], backgroundColor: 'rgba(249,115,22,.8)', borderRadius: 4 }
-  ]},
-  options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { labels: { boxWidth: 14 } },
-      tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR.format(c.parsed.x)}` } } },
-    scales: { x: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } } } }
-});
-
 /* ================================================================
    10. RENDERING
    ================================================================ */
@@ -775,8 +795,8 @@ function recomputeAll() {
 
   // Deviation drives the projection → always computed over all data
   const deltaEl = document.getElementById('kpi-delta');
-  deltaEl.textContent = (aggFull.deltaSavingsAnnual >= 0 ? '+' : '') + fmtEUR0.format(aggFull.deltaSavingsAnnual);
-  deltaEl.className = 'text-lg font-bold mt-1 ' + (aggFull.deltaSavingsAnnual >= 0 ? 'text-emerald-400' : 'text-rose-400');
+  deltaEl.textContent = (aggFull.deviationTotal >= 0 ? '+' : '') + fmtEUR0.format(aggFull.deviationTotal);
+  deltaEl.className = 'text-lg font-bold mt-1 ' + (aggFull.deviationTotal >= 0 ? 'text-emerald-400' : 'text-rose-400');
 
   document.getElementById('kpi-incidental').textContent = fmtEUR.format(aggFull.incidentalTotal);
   document.getElementById('kpi-incidental-sub').textContent = aggFull.incidentalCount + ' transaction(s) flagged';
@@ -788,8 +808,7 @@ function recomputeAll() {
   // Projection chart (all data)
   const labels = [];
   for (let i = 0; i <= settings.horizon; i++) labels.push(String(PROJECTION_START_YEAR + i));
-  const plan = projectNetWorth(aggFull, false);
-  const actual = projectNetWorth(aggFull, true);
+  const { plan, actual } = projectSeries(aggFull);
   chartProjection.data.labels = labels;
   chartProjection.data.datasets[0].data = plan;
   chartProjection.data.datasets[1].data = actual;
@@ -860,13 +879,6 @@ function renderIncidentalTracker(agg) {
   document.getElementById('inc-summary').textContent =
     `spent ${fmtEUR0.format(totSpent)} of ${fmtEUR0.format(totBudget)} planned · ` +
     (remaining >= 0 ? fmtEUR0.format(remaining) + ' remaining' : fmtEUR0.format(-remaining) + ' OVER budget');
-
-  // Horizontal budget-vs-actual chart (only projects with budget or spend)
-  const shown = all.filter(p => (p.budget || 0) > 0 || (agg.incidentalByProject[p.name] || 0) !== 0);
-  chartIncidental.data.labels = shown.map(p => p.name);
-  chartIncidental.data.datasets[0].data = shown.map(p => p.budget || 0);
-  chartIncidental.data.datasets[1].data = shown.map(p => agg.incidentalByProject[p.name] || 0);
-  chartIncidental.update();
 }
 
 function renderProjects() {
@@ -1181,13 +1193,6 @@ function bindSettings() {
       renderTable(); // threshold changes can re-flag rows
     });
   }
-  const chk = document.getElementById('set-includePlanned');
-  chk.checked = settings.includePlanned;
-  chk.addEventListener('change', () => {
-    settings.includePlanned = chk.checked;
-    saveJSON(LS_KEYS.settings, settings);
-    recomputeAll();
-  });
 }
 
 // Upload (input + drag & drop), parsed with PapaParse-backed pipeline
@@ -1253,7 +1258,6 @@ document.getElementById('btn-reset-all').addEventListener('click', () => {
 });
 function bindSettingValues() {
   for (const [elId, key] of SETTING_INPUTS) document.getElementById(elId).value = settings[key];
-  document.getElementById('set-includePlanned').checked = settings.includePlanned;
 }
 
 /* ================================================================
