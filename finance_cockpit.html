@@ -223,8 +223,9 @@
       <div>
         <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Bookings <span class="font-normal normal-case text-slate-600">— toggle incidental</span></h3>
         <div id="sav-items" class="space-y-1 max-h-72 overflow-y-auto pr-1"></div>
-        <h3 id="inv-head" class="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2 hidden">Investment injections by year</h3>
-        <div id="inv-years" class="space-y-1"></div>
+        <h3 id="inv-head" class="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2 hidden">Investment bookings <span class="font-normal normal-case text-slate-600">— toggle off wrongly-detected ones</span></h3>
+        <div id="inv-items" class="space-y-1 max-h-56 overflow-y-auto pr-1"></div>
+        <div id="inv-years" class="space-y-1 mt-2"></div>
         <div id="inv-detected" class="text-[10px] text-slate-600 mt-2"></div>
       </div>
     </div>
@@ -673,8 +674,16 @@ function rebuildInvestIbans() {
   }
   investDetected = [...found.entries()].map(([iban, term]) => ({ iban, term }));
 }
-function isInvestmentTransfer(t) {
+// Candidate = IBAN looks like a broker account. Counted = candidate the user
+// hasn't toggled off. Excluding a wrongly-detected one lets it fall back to
+// normal triage (so it can count as spending instead).
+function isInvestmentCandidate(t) {
   return !!(t.iban && investIbans.has(t.iban));
+}
+function isInvestmentTransfer(t) {
+  if (!isInvestmentCandidate(t)) return false;
+  const o = overrides[t.id];
+  return !(o && o.notInvestment);
 }
 // A savings movement counts as "incidental" (a big one-off, e.g. funding a
 // planned goal) above the threshold, unless the user has flagged it by hand.
@@ -748,10 +757,14 @@ function aggregate(txList) {
       agg.savings.items.push({ id: t.id, date: t.date, desc: (t.desc || t.name || '').trim(),
         amount: t.amount, incidental: inc });
     }
-    if (isInvestmentTransfer(t) && t.amount < 0) {
-      agg.invest.byYear[year] = (agg.invest.byYear[year] || 0) + (-t.amount);
-      agg.invest.total += -t.amount; agg.invest.count++;
-      agg.invest.items.push({ id: t.id, date: t.date, desc: (t.desc || t.name || '').trim(), amount: t.amount });
+    if (isInvestmentCandidate(t) && t.amount < 0) {
+      const counted = isInvestmentTransfer(t); // false if user toggled it off
+      agg.invest.items.push({ id: t.id, date: t.date, desc: (t.desc || t.name || '').trim(),
+        amount: t.amount, excluded: !counted });
+      if (counted) {
+        agg.invest.byYear[year] = (agg.invest.byYear[year] || 0) + (-t.amount);
+        agg.invest.total += -t.amount; agg.invest.count++;
+      }
     }
 
     if (e.cls === 'exclude') {
@@ -1089,10 +1102,20 @@ function renderSavings(agg) {
     </div>`;
   }).join('') || '<div class="text-xs text-slate-600 py-2">No savings bookings.</div>';
 
-  // Investment injections by year
-  const invHead = document.getElementById('inv-head');
+  // Investment bookings — each toggleable so wrongly-detected ones can be dropped
+  document.getElementById('inv-head').classList.toggle('hidden', inv.items.length === 0);
+  document.getElementById('inv-items').innerHTML = inv.items.map(it =>
+    `<div class="flex items-center gap-2 text-xs bg-slate-800/40 rounded-lg px-2 py-1.5 ${it.excluded ? 'opacity-50' : ''}" data-inv-id="${esc(it.id)}">
+      <span class="w-14 text-slate-500">${esc(it.date.slice(5))}</span>
+      <span class="w-20 text-right font-medium text-violet-300 ${it.excluded ? 'line-through' : ''}">${fmtEUR0.format(Math.abs(it.amount))}</span>
+      <span class="flex-1 truncate text-slate-400" title="${esc(it.desc)}">${esc(it.desc) || '—'}</span>
+      <button class="inv-ex-toggle text-[10px] font-semibold px-2 py-0.5 rounded border ${it.excluded
+        ? 'bg-slate-800 border-slate-700 text-slate-500'
+        : 'bg-violet-900/40 border-violet-700 text-violet-300'}" title="Toggle whether this counts as an investment">${it.excluded ? 'excluded' : 'investment'}</button>
+    </div>`).join('');
+
+  // Injections by year (counted only)
   const invYears = Object.keys(inv.byYear).sort();
-  invHead.classList.toggle('hidden', invYears.length === 0);
   document.getElementById('inv-years').innerHTML = invYears.map(y =>
     `<div class="flex justify-between text-xs bg-violet-950/30 border border-violet-900/40 rounded-lg px-2 py-1.5">
       <span class="text-slate-300">${y}</span>
@@ -1509,6 +1532,21 @@ document.getElementById('sav-items').addEventListener('click', (ev) => {
   overrides[id] = { ...(overrides[id] || {}), savingsInc: !current };
   saveJSON(LS_KEYS.overrides, overrides);
   recomputeAll();
+});
+
+// Investment booking: toggle whether a (auto-)detected transfer counts as an
+// investment. Excluding one lets it fall back to normal spending triage.
+document.getElementById('inv-items').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('.inv-ex-toggle');
+  if (!btn) return;
+  const row = btn.closest('[data-inv-id]');
+  if (!row) return;
+  const id = row.dataset.invId;
+  const cur = !!(overrides[id] && overrides[id].notInvestment);
+  overrides[id] = { ...(overrides[id] || {}), notInvestment: !cur };
+  saveJSON(LS_KEYS.overrides, overrides);
+  recomputeAll();
+  renderTable(); // re-included bookings may re-appear as spending in the triage list
 });
 
 // Upload (input + drag & drop), parsed with PapaParse-backed pipeline
