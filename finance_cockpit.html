@@ -87,8 +87,8 @@
   <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div class="flex items-center justify-between mb-2">
-        <h2 class="font-semibold text-white">Net worth projection — MJP Netto Resultaat</h2>
-        <span class="text-[11px] text-slate-500">Loaded months adjust their own year; incidental overruns beyond plan dent further</span>
+        <h2 class="font-semibold text-white">Net worth projection — corrected MJP model</h2>
+        <span class="text-[11px] text-slate-500">Op. resultaat − investeringen − incidentelen per jaar · click "Incl. invested capital" in the legend to add the beleggingspot</span>
       </div>
       <div class="relative h-80"><canvas id="chart-projection"></canvas></div>
     </div>
@@ -100,7 +100,7 @@
           <input id="set-startNetWorth" type="number" step="100" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100">
         </label>
         <label class="block">
-          <span class="text-[11px] text-slate-400">Return after 2031 (%/yr)</span>
+          <span class="text-[11px] text-slate-400">Return on buffer (%/yr)</span>
           <input id="set-returnRate" type="number" step="0.1" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100">
         </label>
         <label class="block">
@@ -121,10 +121,10 @@
         </label>
       </div>
       <p class="text-[11px] leading-relaxed text-slate-500">
-        The plan line is the MJP row "2. Netto Resultaat" taken literally: start €34.079 → €17.589 (2026) → €35.848 (2031),
-        incidentals already included. Beyond 2031 it extends with the operational result (+growth above) minus "onvoorzien".
-        Actual = plan, where loaded months replace the budget for their own year and incidental spend only counts
-        when it exceeds the planned yearly total. Threshold derivation: €5.323/mo ÷ 30,4 days ≈ €175/day × 1,15 ≈ <b>€200</b>.
+        Corrected MJP model: NW<sub>y</sub> = NW<sub>y−1</sub>·(1+r) + operationeel resultaat − toekomstige vermogens (€11.3–11.5k/yr)
+        − geplande incidentelen, starting from €34.079. (The sheet deducted the investments only in 2026 — fixed here.)
+        Actuals: loaded months replace the budget for their own year; project spend is deducted when it happens and
+        relieves the project's budget in its planned year. Threshold derivation: €5.323/mo ÷ 30,4 days ≈ €175/day × 1,15 ≈ <b>€200</b>.
       </p>
     </div>
   </section>
@@ -211,8 +211,9 @@
   <footer class="text-[11px] text-slate-600 pb-8">
     Data, triage corrections and projection variables persist in this browser's localStorage. Upload new ASN exports
     (transactiehistorie_*.csv) at any time — duplicates are de-duplicated by date + sequence number + amount.
-    Incidental spend counts toward the planned MJP yearly totals (e.g. the €2.000 Heattransformers payment consumes part of
-    the €26.931 planned for 2026) — only spending beyond the planned total dents the projection.
+    Incidental spend is deducted in the year it actually happens and relieves the project's budget in its planned MJP year
+    (e.g. the €2.000 Heattransformers payment consumes part of the Warmtepomp budget in 2026). Projects done earlier, later,
+    cheaper or more expensive than planned all flow through correctly; only spend without budget left dents the projection.
   </footer>
 </main>
 
@@ -372,34 +373,41 @@ const SAMPLE_CSV = `01-05-2026,NL06ASNB8851233594,,,,,,EUR,767.37,EUR,-16.22,01-
 // Jaarbegroting: recurring outflow €63.336,80/yr = €5.323,49/mo
 const MONTHLY_RECURRING_BUDGET = 5323.49;
 
-// MJP "1. Operationeel Resultaat" per year — annual savings S_y, used to extend the plan beyond 2031
-const BASE_SAVINGS = { 2026: 21741, 2027: 6250, 2028: 8780, 2029: 22996, 2030: 25045, 2031: 27038 };
+// Corrected MJP model (the sheet deducted the yearly investments only in 2026 —
+// confirmed as a sheet mistake): for every year
+//   NW_y = NW_{y-1}·(1+r) + operational result_y − investments_y − planned incidentals_y
+// Operational result = expected earnings − expected spendings, exact values
+// derived to the cent from the sheet's rows:
+const OP_RESULT = { 2026: 21741.24, 2027: 6250.18, 2028: 8779.56, 2029: 22996.31, 2030: 25044.96, 2031: 27037.93 };
 
-// MJP "Totaal incidentieel" per year — the planned incidental budget that triaged
-// incidental spend consumes; only overruns beyond these dent the projection
+// MJP "Toekomstige vermogens" — yearly transfers into the beleggingsrekening
+const INVESTMENTS = { 2026: 11300, 2027: 11526, 2028: 11526, 2029: 11526, 2030: 11526, 2031: 11526 };
+
+// MJP "Totaal incidentieel" per year — the planned incidental budget
 const PLANNED_INCIDENTALS = { 2026: 26931, 2027: 14000, 2028: 4900, 2029: 2450, 2030: 33500, 2031: 17000 };
 const PLANNED_INCIDENTAL_TAIL = 2000; // "Onvoorzien" beyond the MJP horizon
 
-// MJP row "2. Netto Resultaat" — the expected net worth at each year-end, taken
-// literally from the sheet (start position €34.079, year values incl. incidentals)
-const PLAN_START_NET_WORTH = 34079;
-const PLAN_NET_WORTH = { 2026: 17589.24, 2027: 9839.42, 2028: 13718.98, 2029: 34265.29, 2030: 25810.25, 2031: 35848.18 };
+const PLAN_START_NET_WORTH = 34079;   // MJP start position
+const CRITICAL_THRESHOLD = 15000;     // MJP "Kritieke vermogensgrens"
 
 const PROJECTION_START_YEAR = 2026;
 
 // Sub-projects + their planned budgets, taken from the MJP "Incidentieel" block.
 // Fully editable at runtime (see "Manage projects & budgets" panel); persisted.
+// year = the MJP year the budget is planned in. Actual spend on a project is
+// deducted in the year it really happens and relieves the budget (up to its
+// amount) in the planned year — early, late, cheaper or more expensive all work.
 const DEFAULT_PROJECTS = [
-  { name: 'Badkamer', budget: 12000 },           // Nieuwe badkamer 2027
-  { name: 'Auto', budget: 30000 },               // Nieuwe auto 2030
-  { name: 'Warmtepomp', budget: 11000 },         // Warmtepomp 2026
-  { name: 'Dakkapel', budget: 15000 },           // Dakkapel 2031
-  { name: 'Kantoor', budget: 1200 },             // Kantoor afmaken 2026
-  { name: 'Trapkast', budget: 750 },             // Trapkast bouwen 2026
-  { name: 'Tuin', budget: 5931 },                // Tuinverbouwing 4831 + 350 + 750
-  { name: 'Keuken / Witgoed', budget: 5150 },    // Oven 900 + Inductie 1300 + Magnetron 700 + Witgoed 2250
-  { name: 'Bedombouw', budget: 450 },            // Bedombouw 2026
-  { name: 'Onvoorzien / Overig', budget: 1500 }  // Onvoorzien 2026
+  { name: 'Badkamer', budget: 12000, year: 2027 },
+  { name: 'Auto', budget: 30000, year: 2030 },
+  { name: 'Warmtepomp', budget: 11000, year: 2026 },
+  { name: 'Dakkapel', budget: 15000, year: 2031 },
+  { name: 'Kantoor', budget: 1200, year: 2026 },
+  { name: 'Trapkast', budget: 750, year: 2026 },
+  { name: 'Tuin', budget: 5931, year: 2026 },     // Tuinverbouwing 4831 + 350 + 750
+  { name: 'Keuken / Witgoed', budget: 5150, year: 2026 }, // Oven 900 + Inductie 1300 + Magnetron 700 + Witgoed 2250
+  { name: 'Bedombouw', budget: 450, year: 2026 },
+  { name: 'Onvoorzien / Overig', budget: 1500, year: 2026 }
 ];
 
 // Household accounts: the checking account itself + joint savings account.
@@ -440,6 +448,13 @@ if (!settings) {
 let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
 let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
+// Migrate stored projects that predate planned years
+for (const p of projects) {
+  if (!p.year) {
+    const d = DEFAULT_PROJECTS.find(dp => dp.name === p.name);
+    p.year = d ? d.year : PROJECTION_START_YEAR;
+  }
+}
 let activeFilter = 'all';
 let catFilter = settings.catFilter ? new Set(settings.catFilter) : null; // null = all categories shown
 let signFilter = settings.signFilter || 'all'; // 'all' | 'in' (positive) | 'out' (negative)
@@ -680,48 +695,59 @@ function activePeriodLabel() {
 }
 
 /* ================================================================
-   7. PROJECTION MODEL
-   Plan = the MJP row "2. Netto Resultaat" taken literally for
-   2026–2031, then extended: NR_y = NR_{y-1}·(1+r) + S_y − I_y.
+   7. PROJECTION MODEL (corrected MJP)
+   Plan, every year:
+     NW_y = NW_{y-1}·(1+r) + op result_y − investments_y − planned incidentals_y
    Actual = plan, plus per-year adjustments from the loaded data:
    - budget deviation of loaded months shifts that year's result
-     (the level shift carries forward — spent money stays gone —
-     but the slope returns to plan)
-   - triaged incidentals consume the planned incidental budget;
-     only the overrun beyond plan is an extra deduction
+     (level shift carries forward, slope returns to plan)
+   - incidental spend on a project is deducted in the year it
+     actually happens and relieves the project's budget (capped)
+     in its planned year — handles early/late/cheaper/dearer
    ================================================================ */
-function baseSavingsForYear(year) {
-  if (BASE_SAVINGS[year] !== undefined) return BASE_SAVINGS[year];
-  const lastYear = 2031;
-  const growth = Math.pow(1 + settings.savingsGrowth / 100, year - lastYear);
-  return BASE_SAVINGS[lastYear] * growth;
+function grown(value, year) { // extend a 2031 value at the growth-rate setting
+  return value * Math.pow(1 + settings.savingsGrowth / 100, year - 2031);
+}
+function opResultForYear(year) {
+  return OP_RESULT[year] !== undefined ? OP_RESULT[year] : grown(OP_RESULT[2031], year);
+}
+function investmentForYear(year) {
+  return INVESTMENTS[year] !== undefined ? INVESTMENTS[year] : grown(INVESTMENTS[2031], year);
 }
 function plannedIncidentalForYear(year) {
-  if (PLANNED_INCIDENTALS[year] !== undefined) return PLANNED_INCIDENTALS[year];
-  const growth = Math.pow(1 + settings.savingsGrowth / 100, year - 2031);
-  return PLANNED_INCIDENTAL_TAIL * growth;
+  return PLANNED_INCIDENTALS[year] !== undefined ? PLANNED_INCIDENTALS[year] : grown(PLANNED_INCIDENTAL_TAIL, year);
 }
 
 function projectSeries(agg) {
   const offset = settings.startNetWorth - PLAN_START_NET_WORTH; // shift if your real start differs from the sheet
   const r = settings.returnRate / 100;
-  const plan = [PLAN_START_NET_WORTH + offset];
-  const actual = [PLAN_START_NET_WORTH + offset];
-  let planNw = PLAN_START_NET_WORTH;
-  let cumDelta = 0;
+
+  // Budget relief per planned year: what you already spent on a project no
+  // longer needs to be paid in the year the MJP scheduled it for.
+  const relief = {};
+  for (const p of projects) {
+    const spent = Math.max(0, agg.incidentalByProject[p.name] || 0);
+    if (!spent || !(p.budget > 0)) continue;
+    const y = p.year || PROJECTION_START_YEAR;
+    relief[y] = (relief[y] || 0) + Math.min(p.budget, spent);
+  }
+
+  const start = PLAN_START_NET_WORTH + offset;
+  const plan = [start], actual = [start], total = [start];
+  let planNw = PLAN_START_NET_WORTH, cumDelta = 0, cumInvest = 0;
   for (let i = 0; i < settings.horizon; i++) {
     const year = PROJECTION_START_YEAR + i;
-    if (PLAN_NET_WORTH[year] !== undefined) planNw = PLAN_NET_WORTH[year];
-    else planNw = planNw * (1 + r) + baseSavingsForYear(year) - plannedIncidentalForYear(year);
+    planNw = planNw * (1 + r) + opResultForYear(year) - investmentForYear(year) - plannedIncidentalForYear(year);
+    cumInvest += investmentForYear(year);
 
     const deviation = agg.deviationByYear[year] || 0;
-    const overrun = Math.max(0, (agg.incidentalNetByYear[year] || 0) - plannedIncidentalForYear(year));
-    cumDelta += deviation - overrun;
+    cumDelta += deviation + (relief[year] || 0) - (agg.incidentalNetByYear[year] || 0);
 
     plan.push(planNw + offset);
     actual.push(planNw + offset + cumDelta);
+    total.push(planNw + offset + cumDelta + cumInvest);
   }
-  return { plan, actual };
+  return { plan, actual, total };
 }
 
 /* ================================================================
@@ -746,7 +772,11 @@ const chartProjection = new Chart(document.getElementById('chart-projection'), {
     { label: 'Plan (MJP Netto Resultaat)', data: [], borderColor: '#475569', backgroundColor: 'rgba(71,85,105,.08)',
       borderDash: [6, 4], pointRadius: 0, tension: 0.15, fill: true },
     { label: 'Actual (incl. loaded data)', data: [], borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,.10)',
-      pointRadius: 2, pointBackgroundColor: '#22d3ee', tension: 0.15, fill: true }
+      pointRadius: 2, pointBackgroundColor: '#22d3ee', tension: 0.15, fill: true },
+    { label: 'Kritieke grens (€15k)', data: [], borderColor: 'rgba(244,63,94,.7)', borderWidth: 1.5,
+      borderDash: [3, 3], pointRadius: 0, fill: false },
+    { label: 'Incl. invested capital', data: [], borderColor: '#a78bfa', borderWidth: 1.5,
+      borderDash: [6, 4], pointRadius: 0, tension: 0.15, fill: false, hidden: true }
   ]},
   options: {
     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -808,10 +838,12 @@ function recomputeAll() {
   // Projection chart (all data)
   const labels = [];
   for (let i = 0; i <= settings.horizon; i++) labels.push(String(PROJECTION_START_YEAR + i));
-  const { plan, actual } = projectSeries(aggFull);
+  const { plan, actual, total } = projectSeries(aggFull);
   chartProjection.data.labels = labels;
   chartProjection.data.datasets[0].data = plan;
   chartProjection.data.datasets[1].data = actual;
+  chartProjection.data.datasets[2].data = labels.map(() => CRITICAL_THRESHOLD);
+  chartProjection.data.datasets[3].data = total;
   chartProjection.update();
 
   const endActual = actual[actual.length - 1];
@@ -863,7 +895,7 @@ function renderIncidentalTracker(agg) {
     return `
       <div>
         <div class="flex justify-between items-baseline text-xs mb-1">
-          <span class="font-medium text-slate-200">${esc(p.name)}</span>
+          <span class="font-medium text-slate-200">${esc(p.name)}${p.year ? ` <span class="text-slate-500 font-normal">’${String(p.year).slice(2)}</span>` : ''}</span>
           <span class="text-slate-400">${fmtEUR0.format(spent)} <span class="text-slate-600">/ ${fmtEUR0.format(budget)}</span>
             <span class="${over ? 'text-rose-400' : 'text-slate-500'} ml-1">${pctLabel}</span></span>
         </div>
@@ -889,6 +921,7 @@ function renderProjects() {
         <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">€</span>
         <input type="number" step="50" min="0" class="proj-budget w-32 bg-slate-800 border border-slate-700 rounded-lg pl-5 pr-2 py-1.5 text-sm text-slate-100" value="${p.budget}" placeholder="Budget">
       </div>
+      <input type="number" step="1" min="2026" max="2055" class="proj-year w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-slate-100" value="${p.year || PROJECTION_START_YEAR}" title="Planned year (MJP)">
       <button class="proj-del text-sm font-semibold bg-slate-800 hover:bg-rose-900 text-slate-400 hover:text-rose-200 px-3 py-1.5 rounded-lg border border-slate-700" title="Remove project">✕</button>
     </div>`).join('');
 }
@@ -1145,6 +1178,12 @@ document.getElementById('proj-list').addEventListener('change', (ev) => {
     ev.target.value = projects[idx].budget;
     saveJSON(LS_KEYS.projects, projects);
     recomputeAll();
+  } else if (ev.target.classList.contains('proj-year')) {
+    const v = parseInt(ev.target.value, 10);
+    projects[idx].year = isFinite(v) ? Math.min(2055, Math.max(PROJECTION_START_YEAR, v)) : PROJECTION_START_YEAR;
+    ev.target.value = projects[idx].year;
+    saveJSON(LS_KEYS.projects, projects);
+    recomputeAll();
   }
 });
 document.getElementById('proj-list').addEventListener('click', (ev) => {
@@ -1164,7 +1203,7 @@ document.getElementById('proj-list').addEventListener('click', (ev) => {
 document.getElementById('btn-add-project').addEventListener('click', () => {
   let n = 1, name;
   do { name = 'New project' + (n === 1 ? '' : ' ' + n); n++; } while (projects.some(p => p.name === name));
-  projects.push({ name, budget: 0 });
+  projects.push({ name, budget: 0, year: PROJECTION_START_YEAR });
   saveJSON(LS_KEYS.projects, projects);
   renderProjects();
   recomputeAll();
