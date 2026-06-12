@@ -14,6 +14,7 @@
   .pill input{display:none}
   .pill span{cursor:pointer;user-select:none;transition:all .12s ease}
   .pill input:checked + span.rec{background:#0e7490;color:#e0f2fe;border-color:#06b6d4}
+  .pill input:checked + span.yr{background:#6d28d9;color:#ede9fe;border-color:#8b5cf6}
   .pill input:checked + span.inc{background:#9a3412;color:#ffedd5;border-color:#f97316}
   .pill input:checked + span.exc{background:#374151;color:#e5e7eb;border-color:#9ca3af}
 </style>
@@ -168,6 +169,19 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="inc-tracker"></div>
   </section>
 
+  <!-- Yearly recurring tracker -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h2 class="font-semibold text-white">Yearly recurring — spent vs budget</h2>
+      <div id="yr-year-filter" class="flex flex-wrap gap-1 text-xs"></div>
+      <button id="btn-edit-yearly" class="text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700">Edit budgets</button>
+      <span id="yr-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-4">Expenses that recur every year but not monthly (<span class="text-violet-300 font-semibold">[Yearly]</span> in the triage) — vacations, insurance, annual taxes. Held <b>out of the monthly budget</b> so they don't distort it; the bar shows actual spend against the annual budget, and the projection compares them pro-rata. Only the <i>Vakantie</i> category auto-tags; tag the rest in the transaction list.</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="yr-tracker"></div>
+    <div id="yr-editor" class="hidden mt-4 pt-4 border-t border-slate-800 space-y-2"></div>
+  </section>
+
   <!-- Savings & investments -->
   <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
     <div class="flex flex-wrap items-center gap-2 mb-1">
@@ -269,7 +283,8 @@
         </div>
         <div class="flex gap-1">
           <button data-filter="all" class="flt px-3 py-1 rounded-lg border border-slate-700 bg-slate-800">All</button>
-          <button data-filter="recurring" class="flt px-3 py-1 rounded-lg border border-slate-700">Recurring</button>
+          <button data-filter="recurring" class="flt px-3 py-1 rounded-lg border border-slate-700">Monthly</button>
+          <button data-filter="yearly" class="flt px-3 py-1 rounded-lg border border-slate-700">Yearly</button>
           <button data-filter="incidental" class="flt px-3 py-1 rounded-lg border border-slate-700">Incidental</button>
           <button data-filter="exclude" class="flt px-3 py-1 rounded-lg border border-slate-700">Excluded</button>
         </div>
@@ -513,6 +528,21 @@ const DEFAULT_PROJECTS = [
   { name: 'Onvoorzien 2031', budget: 2000, year: 2031 }
 ];
 
+// MJP "Jaarlijks terugkerend" — expenses that recur every year but not monthly
+// (vacations, insurance, annual taxes…). Kept OUT of the monthly budget so they
+// don't distort it; compared pro-rata against actuals on the projection's actual
+// line. Total €17.431/yr — already inside the sheet's operational result, so it
+// is NOT added to the plan again, only used for the actual-vs-budget deviation.
+const DEFAULT_YEARLY = [
+  { name: 'Vakanties', budget: 8051 },
+  { name: 'Uitjes en activiteiten', budget: 1500 },
+  { name: 'Schilderwerk huis', budget: 1200 },
+  { name: 'Gemeentelijke belastingen', budget: 1700 },
+  { name: 'Auto onderhoud', budget: 500 },
+  { name: 'Zorgverzekering', budget: 2980 },
+  { name: 'Overige onderhoud huis', budget: 1500 }
+];
+
 // Household accounts: the checking account itself + joint savings account.
 // Transfers to the joint account ("Sparen", "Maandelijkse inleg") shift money
 // between own pockets and must not count as spending.
@@ -534,10 +564,11 @@ const DEFAULT_SETTINGS = {
   investmentAccounts: [],                     // broker / investment account(s) — none in the data yet
   savingsIncidentalThreshold: 1500,           // |€| at/above which a savings movement auto-counts as incidental
   projView: 'multi',                          // projection chart view: 'multi' | 'ytd'
-  incYear: 'all'                              // incidental tracker year filter: 'all' | a year
+  incYear: 'all',                             // incidental tracker year filter: 'all' | a year
+  yrYear: 'all'                               // yearly tracker year filter: 'all' | a year
 };
 
-const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2' };
+const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2', yearly: 'fc.yearly.v1' };
 
 // v1→v2 project rename map: the old coarse buckets became the sheet's exact items
 const PROJECT_RENAMES_V2 = {
@@ -588,6 +619,7 @@ for (const p of projects) {
   if (!p.year) { const d = DEFAULT_PROJECTS.find(dp => dp.name === p.name); p.year = d ? d.year : PROJECTION_START_YEAR; }
   if (p.done === undefined) p.done = false;
 }
+let yearly = loadJSON(LS_KEYS.yearly) || DEFAULT_YEARLY.map(y => ({ ...y }));
 let activeFilter = 'all';
 let catFilter = settings.catFilter ? new Set(settings.catFilter) : null; // null = all categories shown
 let signFilter = settings.signFilter || 'all'; // 'all' | 'in' (positive) | 'out' (negative)
@@ -608,6 +640,7 @@ function persistAll() {
   saveJSON(LS_KEYS.tx, transactions);
   saveJSON(LS_KEYS.overrides, overrides);
   saveJSON(LS_KEYS.projects, projects);
+  saveJSON(LS_KEYS.yearly, yearly);
 }
 
 /* ================================================================
@@ -699,6 +732,13 @@ function guessProject(t) {
   return 'Onvoorzien ' + t.date.slice(0, 4);
 }
 
+// Yearly-recurring auto-detection. Only the unambiguous "Vakantie" bank category
+// is auto-tagged (the biggest item); the rest are tagged by hand in the triage.
+function guessYearly(t) {
+  if (effBankCat(t) === 'Vakantie') return 'Vakanties';
+  return '';
+}
+
 // Bank category honouring a manual override (read directly, never via effective(),
 // so autoClassify can use it without recursion)
 function effBankCat(t) {
@@ -753,6 +793,10 @@ function autoClassify(t) {
   if (isSavingsTransfer(t) || isInvestmentTransfer(t)) return { cls: 'exclude', project: '' };
   if (bankCat === 'Sparen') return { cls: 'exclude', project: '' };
 
+  // Yearly recurring (auto: only the Vakantie category) — kept out of monthly budget
+  const yi = guessYearly(t);
+  if (yi) return { cls: 'yearly', project: yi };
+
   const text = t.name + ' ' + t.desc;
   const big = Math.abs(t.amount) > settings.threshold;
   if (big && (HW_TERMS.test(text) || HW_BANK_CATS.includes(bankCat))) {
@@ -781,6 +825,7 @@ function aggregate(txList) {
     months: new Set(), monthsByYear: {}, recurringSpendByYear: {}, recurringSpendByMonth: {}, recurringIncomeByMonth: {},
     recurringIncome: 0, recurringSpend: 0,
     incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
+    yearlyByYear: {}, yearlyByItem: {}, yearlyByItemYear: {}, yearlyTotal: 0, yearlyCount: 0,
     excludedTotal: 0,
     spendByCat: {}, flowByMonth: {},
     savings: { byMonth: {}, deposit: 0, withdraw: 0, depositInc: 0, withdrawInc: 0, count: 0, items: [] },
@@ -837,6 +882,15 @@ function aggregate(txList) {
       agg.incidentalByProject[proj] = (agg.incidentalByProject[proj] || 0) - t.amount;
       agg.incidentalTotal -= t.amount;
       agg.incidentalCount++;
+    } else if (e.cls === 'yearly') {
+      // negative = spend; positive (refund) reduces it. Tracked apart from the monthly budget.
+      const item = e.project || 'Uitjes en activiteiten';
+      agg.yearlyByYear[year] = (agg.yearlyByYear[year] || 0) - t.amount;
+      agg.yearlyByItem[item] = (agg.yearlyByItem[item] || 0) - t.amount;
+      const key = item + '|' + year;
+      agg.yearlyByItemYear[key] = (agg.yearlyByItemYear[key] || 0) - t.amount;
+      agg.yearlyTotal -= t.amount;
+      agg.yearlyCount++;
     } else { // recurring
       if (t.amount > 0) {
         agg.recurringIncome += t.amount;
@@ -961,6 +1015,8 @@ function projectSeries(agg) {
     relief[y] = (relief[y] || 0) + released;
   }
 
+  const yearlyBudgetTotal = yearly.reduce((s, y) => s + (y.budget || 0), 0);
+
   const start = PLAN_START_NET_WORTH + offset;
   const plan = [start], actual = [start], total = [start];
   let planNw = PLAN_START_NET_WORTH, cumDelta = 0, cumInvest = 0;
@@ -970,7 +1026,12 @@ function projectSeries(agg) {
     cumInvest += investmentForYear(year);
 
     const deviation = agg.deviationByYear[year] || 0;
-    cumDelta += deviation + (relief[year] || 0) - (agg.incidentalNetByYear[year] || 0);
+    // Yearly recurring: pro-rata budget for the loaded months vs actual yearly spend.
+    // (The plan already carries the full yearly budget via the operational result.)
+    const monthsLoaded = (agg.monthsByYear[year] && agg.monthsByYear[year].size) || 0;
+    const yearlyDeviation = monthsLoaded
+      ? yearlyBudgetTotal * (monthsLoaded / 12) - (agg.yearlyByYear[year] || 0) : 0;
+    cumDelta += deviation + yearlyDeviation + (relief[year] || 0) - (agg.incidentalNetByYear[year] || 0);
 
     plan.push(planNw + offset);
     actual.push(planNw + offset + cumDelta);
@@ -1095,6 +1156,7 @@ function recomputeAll() {
   chartCashflow.update();
 
   renderIncidentalTracker(aggFull);
+  renderYearlyTracker(aggFull);
   renderSavings(aggFull);
 }
 
@@ -1276,6 +1338,78 @@ function renderIncidentalTracker(agg) {
     (remaining >= 0 ? fmtEUR0.format(remaining) + ' remaining' : fmtEUR0.format(-remaining) + ' OVER budget');
 }
 
+function renderYearlyTracker(agg) {
+  // Year filter chips — the years for which we have loaded data
+  const years = Object.keys(agg.monthsByYear).map(Number).sort();
+  const sel = settings.yrYear && (settings.yrYear === 'all' || years.includes(+settings.yrYear)) ? settings.yrYear : 'all';
+  document.getElementById('yr-year-filter').innerHTML =
+    ['all', ...years].map(y => `<button data-year="${y}" class="yy px-2.5 py-1 rounded-lg border border-slate-700 ${String(y) === String(sel) ? 'bg-slate-800' : ''}">${y === 'all' ? 'All' : y}</button>`).join('');
+
+  // How much of the annual budget should have been spent by now (pro-rata, only for the selected/loaded years)
+  const proRata = sel === 'all'
+    ? (years.length ? years.reduce((s, y) => s + (agg.monthsByYear[y].size / 12), 0) : 0)
+    : (agg.monthsByYear[+sel] ? agg.monthsByYear[+sel].size / 12 : 0);
+
+  const spentFor = item => sel === 'all'
+    ? (agg.yearlyByItem[item] || 0)
+    : (agg.yearlyByItemYear[item + '|' + sel] || 0);
+
+  const known = yearly.map(y => y.name);
+  const extra = [...new Set(Object.keys(agg.yearlyByItem)
+    .filter(n => !known.includes(n)))]; // items only seen in data
+  const all = [...yearly, ...extra.map(n => ({ name: n, budget: 0 }))];
+
+  let totBudget = 0, totSpent = 0;
+  const rows = all.map(item => {
+    const spent = spentFor(item.name);
+    const annual = item.budget || 0;
+    const expected = annual * proRata; // pro-rata budget so far
+    totBudget += annual; totSpent += spent;
+    const pct = annual > 0 ? (spent / annual * 100) : (spent > 0 ? 100 : 0);
+    const over = expected > 0 ? spent > expected * 1.05 : spent > 0 && annual === 0;
+    const barColor = over ? 'bg-rose-500' : pct > 80 ? 'bg-amber-500' : 'bg-violet-500';
+    const pctLabel = annual > 0 ? pct.toFixed(0) + '%' : (spent > 0 ? 'no budget' : '—');
+    const note = annual > 0
+      ? `${fmtEUR0.format(spent)} of ${fmtEUR0.format(annual)}/yr · expected ${fmtEUR0.format(expected)} by now`
+      : (spent > 0 ? fmtEUR0.format(spent) + ' (untracked item)' : '');
+    return `
+      <div>
+        <div class="flex justify-between items-baseline text-xs mb-1">
+          <span class="font-medium text-slate-200">${esc(item.name)}</span>
+          <span class="text-slate-400">${fmtEUR0.format(spent)} <span class="text-slate-600">/ ${fmtEUR0.format(annual)}</span>
+            <span class="${over ? 'text-rose-400' : 'text-slate-500'} ml-1">${pctLabel}</span></span>
+        </div>
+        <div class="h-2.5 rounded-full bg-slate-800 overflow-hidden">
+          <div class="h-full ${barColor} transition-all" style="width:${Math.min(100, pct).toFixed(1)}%"></div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-0.5 text-right">${note}</div>
+      </div>`;
+  });
+  document.getElementById('yr-tracker').innerHTML = rows.join('');
+
+  const expectedTot = totBudget * proRata;
+  const vs = totSpent - expectedTot;
+  document.getElementById('yr-summary').textContent =
+    (sel === 'all' ? '' : sel + ': ') +
+    `${fmtEUR0.format(totSpent)} spent of ${fmtEUR0.format(totBudget)}/yr · ` +
+    (vs <= 0 ? fmtEUR0.format(-vs) + ' under pro-rata' : fmtEUR0.format(vs) + ' over pro-rata');
+
+  renderYearlyEditor();
+}
+
+function renderYearlyEditor() {
+  document.getElementById('yr-editor').innerHTML = yearly.map((y, i) => `
+    <div class="flex items-center gap-2" data-yidx="${i}">
+      <input class="yr-name flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-slate-100" value="${esc(y.name)}" placeholder="Item name">
+      <div class="relative">
+        <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">€</span>
+        <input type="number" step="50" min="0" class="yr-budget w-32 bg-slate-800 border border-slate-700 rounded-lg pl-5 pr-2 py-1.5 text-sm text-slate-100" value="${y.budget}" placeholder="Annual budget">
+      </div>
+      <button class="yr-del text-sm font-semibold bg-slate-800 hover:bg-rose-900 text-slate-400 hover:text-rose-200 px-3 py-1.5 rounded-lg border border-slate-700" title="Remove item">✕</button>
+    </div>`).join('') +
+    `<button id="btn-add-yearly" class="text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg">+ Add yearly item</button>`;
+}
+
 function renderProjects() {
   document.getElementById('proj-list').innerHTML = projects.map((p, i) => `
     <div class="flex items-center gap-2" data-idx="${i}">
@@ -1351,10 +1485,13 @@ function renderTable() {
     shown++;
     const label = t.name || t.desc.slice(0, 40);
     const amountCls = t.amount < 0 ? 'text-rose-300' : 'text-emerald-400';
-    const projNames = projects.map(p => p.name);
-    if (e.project && !projNames.includes(e.project)) projNames.unshift(e.project); // keep orphaned mapping visible
-    const projectOptions = projNames.map(p =>
-      `<option value="${esc(p)}"${p === e.project ? ' selected' : ''}>${esc(p)}</option>`).join('');
+    // Dropdown options depend on the class: incidental → projects, yearly → yearly items
+    const isYearly = e.cls === 'yearly';
+    const ddNames = isYearly ? yearly.map(y => y.name) : projects.map(p => p.name);
+    if (e.project && (isYearly ? e.cls === 'yearly' : e.cls === 'incidental') && !ddNames.includes(e.project)) ddNames.unshift(e.project);
+    const projectOptions = ddNames.map(n =>
+      `<option value="${esc(n)}"${n === e.project ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    const ddEnabled = e.cls === 'incidental' || e.cls === 'yearly';
     rows.push(`
       <tr class="border-b border-slate-800/60 hover:bg-slate-800/30" data-id="${esc(t.id)}">
         <td class="px-3 py-2 whitespace-nowrap text-slate-400">${esc(t.date)}</td>
@@ -1371,6 +1508,8 @@ function renderTable() {
           <div class="flex gap-1">
             <label class="pill"><input type="radio" name="cls-${esc(t.id)}" value="recurring"${e.cls === 'recurring' ? ' checked' : ''}>
               <span class="rec inline-block text-[10px] font-semibold px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-400">Monthly</span></label>
+            <label class="pill"><input type="radio" name="cls-${esc(t.id)}" value="yearly"${e.cls === 'yearly' ? ' checked' : ''}>
+              <span class="yr inline-block text-[10px] font-semibold px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-400">Yearly</span></label>
             <label class="pill"><input type="radio" name="cls-${esc(t.id)}" value="incidental"${e.cls === 'incidental' ? ' checked' : ''}>
               <span class="inc inline-block text-[10px] font-semibold px-2 py-1 rounded-md border border-slate-700 bg-slate-800 text-slate-400">Incidental</span></label>
             <label class="pill"><input type="radio" name="cls-${esc(t.id)}" value="exclude"${e.cls === 'exclude' ? ' checked' : ''}>
@@ -1379,7 +1518,7 @@ function renderTable() {
         </td>
         <td class="px-3 py-2">
           <select class="proj-select bg-slate-800 border border-slate-700 rounded-md text-[11px] px-1.5 py-1 text-slate-300 disabled:opacity-30"
-                  ${e.cls === 'incidental' ? '' : 'disabled'}>
+                  ${ddEnabled ? '' : 'disabled'}>
             ${projectOptions}
           </select>
         </td>
@@ -1403,13 +1542,15 @@ document.getElementById('tx-body').addEventListener('change', (ev) => {
   let forceTableRender = false;
 
   if (ev.target.type === 'radio') {
+    const prev = current.cls;
     current.cls = ev.target.value;
     overrides[id] = current;
-    const sel = tr.querySelector('.proj-select');
-    sel.disabled = current.cls !== 'incidental';
-    if (current.cls === 'incidental' && !current.project) {
-      current.project = sel.value || guessProject(tx.name + ' ' + tx.desc);
+    if (current.cls === 'incidental') {
+      if (!current.project || prev === 'yearly') current.project = guessProject(tx);
+    } else if (current.cls === 'yearly') {
+      if (!current.project || prev === 'incidental') current.project = guessYearly(tx) || yearly[0].name;
     }
+    forceTableRender = true; // dropdown contents (projects vs yearly items) and enabled state change
   } else if (ev.target.classList.contains('proj-select')) {
     current.project = ev.target.value;
     current.cls = current.cls || effective(tx).cls;
@@ -1633,6 +1774,57 @@ document.getElementById('inc-year-filter').addEventListener('click', (ev) => {
   recomputeAll();
 });
 
+// Yearly tracker: year filter
+document.getElementById('yr-year-filter').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.yy');
+  if (!b) return;
+  settings.yrYear = b.dataset.year;
+  saveJSON(LS_KEYS.settings, settings);
+  recomputeAll();
+});
+// Yearly tracker: show/hide the budget editor
+document.getElementById('btn-edit-yearly').addEventListener('click', () => {
+  document.getElementById('yr-editor').classList.toggle('hidden');
+});
+// Yearly budget editor: rename / re-budget / remove / add
+document.getElementById('yr-editor').addEventListener('change', (ev) => {
+  const row = ev.target.closest('[data-yidx]');
+  if (!row) return;
+  const i = parseInt(row.dataset.yidx, 10);
+  if (!yearly[i]) return;
+  if (ev.target.classList.contains('yr-name')) {
+    const oldName = yearly[i].name, newName = ev.target.value.trim();
+    if (!newName || newName === oldName) { ev.target.value = oldName; return; }
+    if (yearly.some((y, j) => j !== i && y.name === newName)) { alert('A yearly item named "' + newName + '" already exists.'); ev.target.value = oldName; return; }
+    yearly[i].name = newName;
+    for (const id in overrides) if (overrides[id].project === oldName) overrides[id].project = newName; // re-label tagged tx
+    saveJSON(LS_KEYS.overrides, overrides); saveJSON(LS_KEYS.yearly, yearly);
+    recomputeAll(); renderTable();
+  } else if (ev.target.classList.contains('yr-budget')) {
+    const v = parseFloat(ev.target.value);
+    yearly[i].budget = isFinite(v) && v >= 0 ? v : 0;
+    ev.target.value = yearly[i].budget;
+    saveJSON(LS_KEYS.yearly, yearly); recomputeAll();
+  }
+});
+document.getElementById('yr-editor').addEventListener('click', (ev) => {
+  if (ev.target.id === 'btn-add-yearly') {
+    let n = 1, name;
+    do { name = 'New yearly item' + (n === 1 ? '' : ' ' + n); n++; } while (yearly.some(y => y.name === name));
+    yearly.push({ name, budget: 0 });
+    saveJSON(LS_KEYS.yearly, yearly); recomputeAll(); renderTable();
+    return;
+  }
+  if (!ev.target.classList.contains('yr-del')) return;
+  const row = ev.target.closest('[data-yidx]');
+  if (!row) return;
+  const i = parseInt(row.dataset.yidx, 10);
+  if (!yearly[i]) return;
+  if (!confirm('Remove yearly item "' + yearly[i].name + '"? Transactions tagged to it keep the label until re-triaged.')) return;
+  yearly.splice(i, 1);
+  saveJSON(LS_KEYS.yearly, yearly); recomputeAll(); renderTable();
+});
+
 // Projection view toggle (multi-year ↔ YTD vs budget)
 document.getElementById('proj-view').addEventListener('click', (ev) => {
   const b = ev.target.closest('.pv');
@@ -1726,9 +1918,11 @@ document.getElementById('btn-reset-all').addEventListener('click', () => {
   localStorage.removeItem(LS_KEYS.tx);
   localStorage.removeItem(LS_KEYS.overrides);
   localStorage.removeItem(LS_KEYS.projects);
+  localStorage.removeItem(LS_KEYS.yearly);
   settings = { ...DEFAULT_SETTINGS };
   overrides = {};
   projects = DEFAULT_PROJECTS.map(p => ({ ...p }));
+  yearly = DEFAULT_YEARLY.map(y => ({ ...y }));
   transactions = [];
   sortMode = 'date';
   catFilter = null;
