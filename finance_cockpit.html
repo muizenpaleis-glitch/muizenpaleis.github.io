@@ -172,11 +172,23 @@
     <div class="flex flex-wrap items-center gap-2 mb-3">
       <h2 class="font-semibold text-white">Transaction triage</h2>
       <span id="tx-count" class="text-[11px] text-slate-500"></span>
-      <div class="ml-auto flex gap-1 text-xs">
-        <button data-filter="all" class="flt px-3 py-1 rounded-lg border border-slate-700 bg-slate-800">All</button>
-        <button data-filter="recurring" class="flt px-3 py-1 rounded-lg border border-slate-700">Recurring</button>
-        <button data-filter="incidental" class="flt px-3 py-1 rounded-lg border border-slate-700">Incidental</button>
-        <button data-filter="exclude" class="flt px-3 py-1 rounded-lg border border-slate-700">Excluded</button>
+      <div class="ml-auto flex items-center gap-2 text-xs">
+        <div class="relative">
+          <button id="cat-filter-btn" class="px-3 py-1 rounded-lg border border-slate-700 hover:bg-slate-800">Categories: all ▾</button>
+          <div id="cat-filter-panel" class="hidden absolute right-0 mt-1 z-30 w-60 bg-slate-900 border border-slate-700 rounded-lg p-2 shadow-2xl">
+            <div class="flex justify-between mb-1 px-1">
+              <button id="cat-all" class="text-cyan-400 hover:underline">Select all</button>
+              <button id="cat-none" class="text-slate-400 hover:underline">Clear</button>
+            </div>
+            <div id="cat-filter-list" class="max-h-64 overflow-y-auto space-y-0.5"></div>
+          </div>
+        </div>
+        <div class="flex gap-1">
+          <button data-filter="all" class="flt px-3 py-1 rounded-lg border border-slate-700 bg-slate-800">All</button>
+          <button data-filter="recurring" class="flt px-3 py-1 rounded-lg border border-slate-700">Recurring</button>
+          <button data-filter="incidental" class="flt px-3 py-1 rounded-lg border border-slate-700">Incidental</button>
+          <button data-filter="exclude" class="flt px-3 py-1 rounded-lg border border-slate-700">Excluded</button>
+        </div>
       </div>
     </div>
     <datalist id="bankcat-list"></datalist>
@@ -414,6 +426,7 @@ let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
 let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
 let activeFilter = 'all';
+let catFilter = settings.catFilter ? new Set(settings.catFilter) : null; // null = all categories shown
 let sortMode = settings.sortMode || 'date';    // 'date' | 'amount-desc' | 'amount-asc'
 let timeGran = settings.timeGran || 'all';     // 'all' | 'year' | 'quarter' | 'month'
 let timePeriod = settings.timePeriod || '';    // e.g. '2026', '2026-Q2', '2026-05'
@@ -862,6 +875,32 @@ function renderProjects() {
     </div>`).join('');
 }
 
+/* ---- Bank-category multi-select filter ---- */
+function distinctCats() {
+  return [...new Set(transactions.map(t => effective(t).bankCat))].sort();
+}
+let lastCatSig = ' ';
+function maybeRebuildCatList() {
+  const sig = distinctCats().join('|');
+  if (sig !== lastCatSig) { lastCatSig = sig; renderCategoryFilterList(); }
+  else updateCatButton();
+}
+function renderCategoryFilterList() {
+  const cats = distinctCats();
+  document.getElementById('cat-filter-list').innerHTML = cats.map(c => `
+    <label class="flex items-center gap-2 text-xs text-slate-300 py-0.5 px-1 rounded hover:bg-slate-800 cursor-pointer">
+      <input type="checkbox" class="cat-cb accent-cyan-500" value="${esc(c)}" ${(!catFilter || catFilter.has(c)) ? 'checked' : ''}>
+      <span class="truncate">${esc(c)}</span>
+    </label>`).join('');
+  updateCatButton();
+}
+function updateCatButton() {
+  const cats = distinctCats();
+  const sel = catFilter ? cats.filter(c => catFilter.has(c)).length : cats.length;
+  document.getElementById('cat-filter-btn').textContent =
+    (sel === cats.length ? 'Categories: all' : 'Categories: ' + sel + '/' + cats.length) + ' ▾';
+}
+
 function renderTable() {
   const tbody = document.getElementById('tx-body');
 
@@ -878,11 +917,14 @@ function renderTable() {
   document.getElementById('sort-ind').textContent =
     sortMode === 'amount-desc' ? '↓' : sortMode === 'amount-asc' ? '↑' : '';
 
+  maybeRebuildCatList();
+
   const rows = [];
   let shown = 0;
   for (const t of ordered) {
     const e = effective(t);
     if (activeFilter !== 'all' && e.cls !== activeFilter) continue;
+    if (catFilter && !catFilter.has(e.bankCat)) continue;
     shown++;
     const label = t.name || t.desc.slice(0, 40);
     const amountCls = t.amount < 0 ? 'text-rose-300' : 'text-emerald-400';
@@ -975,6 +1017,37 @@ document.getElementById('th-amount').addEventListener('click', () => {
   settings.sortMode = sortMode;
   saveJSON(LS_KEYS.settings, settings);
   renderTable();
+});
+
+// Bank-category multi-select filter
+const catBtn = document.getElementById('cat-filter-btn');
+const catPanel = document.getElementById('cat-filter-panel');
+catBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  catPanel.classList.toggle('hidden');
+  if (!catPanel.classList.contains('hidden')) renderCategoryFilterList();
+});
+document.addEventListener('click', (e) => {
+  if (!catPanel.contains(e.target) && e.target !== catBtn) catPanel.classList.add('hidden');
+});
+function persistCatFilter() {
+  settings.catFilter = catFilter ? [...catFilter] : null;
+  saveJSON(LS_KEYS.settings, settings);
+}
+document.getElementById('cat-filter-list').addEventListener('change', (e) => {
+  if (!e.target.classList.contains('cat-cb')) return;
+  const cats = distinctCats();
+  if (!catFilter) catFilter = new Set(cats);            // expand "all" before removing one
+  if (e.target.checked) catFilter.add(e.target.value); else catFilter.delete(e.target.value);
+  if (catFilter.size === cats.length) catFilter = null; // collapse back to "all"
+  persistCatFilter();
+  renderTable();
+});
+document.getElementById('cat-all').addEventListener('click', () => {
+  catFilter = null; persistCatFilter(); renderCategoryFilterList(); renderTable();
+});
+document.getElementById('cat-none').addEventListener('click', () => {
+  catFilter = new Set(); persistCatFilter(); renderCategoryFilterList(); renderTable();
 });
 
 // Time filter (month / quarter / year)
@@ -1131,6 +1204,8 @@ document.getElementById('btn-reset-all').addEventListener('click', () => {
   projects = DEFAULT_PROJECTS.map(p => ({ ...p }));
   transactions = [];
   sortMode = 'date';
+  catFilter = null;
+  lastCatSig = ' ';
   timeGran = 'all';
   timePeriod = '';
   mergeTransactions(parseAsnCsv(SAMPLE_CSV));
