@@ -187,7 +187,7 @@
             <th class="px-3 py-2">Date</th>
             <th class="px-3 py-2">Counterparty / description</th>
             <th class="px-3 py-2">Bank category</th>
-            <th class="px-3 py-2 text-right">Amount</th>
+            <th id="th-amount" class="px-3 py-2 text-right cursor-pointer select-none hover:text-slate-300" title="Click to sort by amount">Amount <span id="sort-ind" class="text-cyan-400"></span></th>
             <th class="px-3 py-2">Triage</th>
             <th class="px-3 py-2">Project</th>
           </tr>
@@ -414,6 +414,7 @@ let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
 let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
 let activeFilter = 'all';
+let sortMode = settings.sortMode || 'date';    // 'date' | 'amount-desc' | 'amount-asc'
 let timeGran = settings.timeGran || 'all';     // 'all' | 'year' | 'quarter' | 'month'
 let timePeriod = settings.timePeriod || '';    // e.g. '2026', '2026-Q2', '2026-05'
 
@@ -869,9 +870,17 @@ function renderTable() {
   document.getElementById('bankcat-list').innerHTML = allCats.map(c => `<option value="${esc(c)}">`).join('');
 
   const view = getFilteredTransactions();
+
+  // Sort order: default is newest date first; the Amount header toggles signed high→low / low→high
+  let ordered = view;
+  if (sortMode === 'amount-desc') ordered = [...view].sort((a, b) => b.amount - a.amount);
+  else if (sortMode === 'amount-asc') ordered = [...view].sort((a, b) => a.amount - b.amount);
+  document.getElementById('sort-ind').textContent =
+    sortMode === 'amount-desc' ? '↓' : sortMode === 'amount-asc' ? '↑' : '';
+
   const rows = [];
   let shown = 0;
-  for (const t of view) {
+  for (const t of ordered) {
     const e = effective(t);
     if (activeFilter !== 'all' && e.cls !== activeFilter) continue;
     shown++;
@@ -958,6 +967,14 @@ document.querySelectorAll('.flt').forEach(btn => {
     document.querySelectorAll('.flt').forEach(b => b.classList.toggle('bg-slate-800', b === btn));
     renderTable();
   });
+});
+
+// Amount column sort: high→low, then low→high, then back to date order
+document.getElementById('th-amount').addEventListener('click', () => {
+  sortMode = sortMode === 'amount-desc' ? 'amount-asc' : sortMode === 'amount-asc' ? 'date' : 'amount-desc';
+  settings.sortMode = sortMode;
+  saveJSON(LS_KEYS.settings, settings);
+  renderTable();
 });
 
 // Time filter (month / quarter / year)
@@ -1113,6 +1130,7 @@ document.getElementById('btn-reset-all').addEventListener('click', () => {
   overrides = {};
   projects = DEFAULT_PROJECTS.map(p => ({ ...p }));
   transactions = [];
+  sortMode = 'date';
   timeGran = 'all';
   timePeriod = '';
   mergeTransactions(parseAsnCsv(SAMPLE_CSV));
