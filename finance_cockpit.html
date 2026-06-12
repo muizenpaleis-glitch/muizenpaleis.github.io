@@ -161,6 +161,7 @@
   <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
     <div class="flex flex-wrap items-center gap-2 mb-1">
       <h2 class="font-semibold text-white">Incidental projects — spent vs MJP budget</h2>
+      <div id="inc-year-filter" class="flex flex-wrap gap-1 text-xs"></div>
       <span id="inc-summary" class="text-[11px] text-slate-500 ml-auto"></span>
     </div>
     <p class="text-[11px] text-slate-500 mb-4">Live total of every transaction triaged as <span class="text-orange-400 font-semibold">[Incidental Project]</span>, grouped by sub-project, against the planned budget from your multi-year plan. Refunds reduce the spent amount.</p>
@@ -532,7 +533,8 @@ const DEFAULT_SETTINGS = {
   savingsAccounts: ['NL16ASNB8851233608'],   // joint savings account(s) — counterparty IBAN
   investmentAccounts: [],                     // broker / investment account(s) — none in the data yet
   savingsIncidentalThreshold: 1500,           // |€| at/above which a savings movement auto-counts as incidental
-  projView: 'multi'                           // projection chart view: 'multi' | 'ytd'
+  projView: 'multi',                          // projection chart view: 'multi' | 'ytd'
+  incYear: 'all'                              // incidental tracker year filter: 'all' | a year
 };
 
 const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2' };
@@ -1230,7 +1232,14 @@ function renderIncidentalTracker(agg) {
   // Union of configured projects and any project that has actual spend
   const known = projects.map(p => p.name);
   const extra = Object.keys(agg.incidentalByProject).filter(n => !known.includes(n));
-  const all = [...projects, ...extra.map(n => ({ name: n, budget: 0 }))];
+  let all = [...projects, ...extra.map(n => ({ name: n, budget: 0 }))];
+
+  // Year filter chips (un-yeared rows with spend are shown in every view)
+  const years = [...new Set(projects.map(p => p.year).filter(Boolean))].sort();
+  const sel = settings.incYear && (settings.incYear === 'all' || years.includes(+settings.incYear)) ? settings.incYear : 'all';
+  document.getElementById('inc-year-filter').innerHTML =
+    ['all', ...years].map(y => `<button data-year="${y}" class="iy px-2.5 py-1 rounded-lg border border-slate-700 ${String(y) === String(sel) ? 'bg-slate-800' : ''}">${y === 'all' ? 'All' : y}</button>`).join('');
+  if (sel !== 'all') all = all.filter(p => !p.year || p.year === +sel);
 
   let totBudget = 0, totSpent = 0;
   const rows = all.map(p => {
@@ -1262,6 +1271,7 @@ function renderIncidentalTracker(agg) {
 
   const remaining = totBudget - totSpent;
   document.getElementById('inc-summary').textContent =
+    (sel === 'all' ? '' : sel + ': ') +
     `spent ${fmtEUR0.format(totSpent)} of ${fmtEUR0.format(totBudget)} planned · ` +
     (remaining >= 0 ? fmtEUR0.format(remaining) + ' remaining' : fmtEUR0.format(-remaining) + ' OVER budget');
 }
@@ -1613,6 +1623,15 @@ function bindSettings() {
     });
   }
 }
+
+// Incidental tracker year filter
+document.getElementById('inc-year-filter').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.iy');
+  if (!b) return;
+  settings.incYear = b.dataset.year;
+  saveJSON(LS_KEYS.settings, settings);
+  recomputeAll();
+});
 
 // Projection view toggle (multi-year ↔ YTD vs budget)
 document.getElementById('proj-view').addEventListener('click', (ev) => {
