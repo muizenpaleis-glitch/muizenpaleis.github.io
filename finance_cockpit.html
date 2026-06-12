@@ -86,10 +86,14 @@
   <!-- Projection + settings -->
   <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="font-semibold text-white">Net worth projection — corrected MJP model</h2>
-        <span class="text-[11px] text-slate-500">Op. resultaat − investeringen − incidentelen per jaar · click "Incl. invested capital" in the legend to add the beleggingspot</span>
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <h2 id="proj-title" class="font-semibold text-white">Net worth projection — corrected MJP model</h2>
+        <div class="flex gap-1 text-xs ml-auto" id="proj-view">
+          <button data-view="multi" class="pv px-2.5 py-1 rounded-lg border border-slate-700">Multi-year</button>
+          <button data-view="ytd" class="pv px-2.5 py-1 rounded-lg border border-slate-700">YTD vs budget</button>
+        </div>
       </div>
+      <p id="proj-subtitle" class="text-[11px] text-slate-500 mb-2"></p>
       <div class="relative h-80"><canvas id="chart-projection"></canvas></div>
     </div>
     <div id="settings-panel" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 transition-shadow">
@@ -237,7 +241,7 @@
       <h2 class="font-semibold text-white">Manage projects &amp; budgets</h2>
       <button id="btn-add-project" class="ml-auto text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg">+ Add project</button>
     </div>
-    <p class="text-[11px] text-slate-500 mb-3">Rename, re-budget, add or remove sub-project categories. These drive the triage dropdowns on every transaction and the tracker above — renaming a project also re-labels every transaction already mapped to it. Changes persist in localStorage.</p>
+    <p class="text-[11px] text-slate-500 mb-3">Rename, re-budget, re-schedule, add or remove sub-project categories. These drive the triage dropdowns, the tracker above <b>and the plan line of the projection</b> — removing a project or changing its budget/year recalculates the MJP graph. Renaming a project re-labels every transaction already mapped to it. Changes persist in localStorage.</p>
     <div id="proj-list" class="space-y-2"></div>
   </section>
 
@@ -463,8 +467,11 @@ const OP_RESULT = { 2026: 21741.24, 2027: 6250.18, 2028: 8779.56, 2029: 22996.31
 // MJP "Toekomstige vermogens" — yearly transfers into the beleggingsrekening
 const INVESTMENTS = { 2026: 11300, 2027: 11526, 2028: 11526, 2029: 11526, 2030: 11526, 2031: 11526 };
 
-// MJP "Totaal incidentieel" per year — the planned incidental budget
-const PLANNED_INCIDENTALS = { 2026: 26931, 2027: 14000, 2028: 4900, 2029: 2450, 2030: 33500, 2031: 17000 };
+// MJP incidental items NOT tracked as named projects (yearly onvoorzien and
+// small leftovers): the remainder of the sheet's yearly totals after the
+// default project budgets. The named projects are summed live from the project
+// list, so adding, removing or re-budgeting a project recalculates the plan.
+const UNNAMED_INCIDENTALS = { 2026: 950, 2027: 2000, 2028: 4900, 2029: 2450, 2030: 3500, 2031: 2000 };
 const PLANNED_INCIDENTAL_TAIL = 2000; // "Onvoorzien" beyond the MJP horizon
 
 const PLAN_START_NET_WORTH = 34079;   // MJP start position
@@ -509,7 +516,8 @@ const DEFAULT_SETTINGS = {
   // Savings & investments
   savingsAccounts: ['NL16ASNB8851233608'],   // joint savings account(s) — counterparty IBAN
   investmentAccounts: [],                     // broker / investment account(s) — none in the data yet
-  savingsIncidentalThreshold: 1500            // |€| at/above which a savings movement auto-counts as incidental
+  savingsIncidentalThreshold: 1500,           // |€| at/above which a savings movement auto-counts as incidental
+  projView: 'multi'                           // projection chart view: 'multi' | 'ytd'
 };
 
 const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v1' };
@@ -725,7 +733,7 @@ function effective(t) {
 function aggregate(txList) {
   const list = txList || transactions;
   const agg = {
-    months: new Set(), monthsByYear: {}, recurringSpendByYear: {},
+    months: new Set(), monthsByYear: {}, recurringSpendByYear: {}, recurringSpendByMonth: {},
     recurringIncome: 0, recurringSpend: 0,
     incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
     excludedTotal: 0,
@@ -789,6 +797,7 @@ function aggregate(txList) {
       else {
         agg.recurringSpend += -t.amount;
         agg.recurringSpendByYear[year] = (agg.recurringSpendByYear[year] || 0) - t.amount;
+        agg.recurringSpendByMonth[month] = (agg.recurringSpendByMonth[month] || 0) - t.amount;
       }
     }
   }
@@ -882,7 +891,10 @@ function investmentForYear(year) {
   return INVESTMENTS[year] !== undefined ? INVESTMENTS[year] : grown(INVESTMENTS[2031], year);
 }
 function plannedIncidentalForYear(year) {
-  return PLANNED_INCIDENTALS[year] !== undefined ? PLANNED_INCIDENTALS[year] : grown(PLANNED_INCIDENTAL_TAIL, year);
+  let total = UNNAMED_INCIDENTALS[year] !== undefined ? UNNAMED_INCIDENTALS[year]
+            : (year > 2031 ? grown(PLANNED_INCIDENTAL_TAIL, year) : 0);
+  for (const p of projects) if ((p.year || PROJECTION_START_YEAR) === year) total += (p.budget || 0);
+  return total;
 }
 
 function projectSeries(agg) {
@@ -947,7 +959,8 @@ const chartProjection = new Chart(document.getElementById('chart-projection'), {
   ]},
   options: {
     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { labels: { boxWidth: 14 } },
+    plugins: { legend: { labels: { boxWidth: 14,
+        filter: (item, data) => data.datasets[item.datasetIndex].data.length > 0 } },
       tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR0.format(c.parsed.y)}` } } },
     scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } } }
   }
@@ -1003,16 +1016,9 @@ function recomputeAll() {
   document.getElementById('hdr-months').textContent =
     transactions.length + ' transactions · ' + aggFull.monthCount + ' month(s): ' + [...aggFull.months].sort().join(', ');
 
-  // Projection chart (all data)
-  const labels = [];
-  for (let i = 0; i <= settings.horizon; i++) labels.push(String(PROJECTION_START_YEAR + i));
+  // Projection chart (all data) — multi-year or YTD view
   const { plan, actual, total } = projectSeries(aggFull);
-  chartProjection.data.labels = labels;
-  chartProjection.data.datasets[0].data = plan;
-  chartProjection.data.datasets[1].data = actual;
-  chartProjection.data.datasets[2].data = labels.map(() => CRITICAL_THRESHOLD);
-  chartProjection.data.datasets[3].data = total;
-  chartProjection.update();
+  updateProjectionChart(aggFull, plan, actual, total);
 
   const endActual = actual[actual.length - 1];
   const endPlan = plan[plan.length - 1];
@@ -1043,6 +1049,48 @@ function recomputeAll() {
 }
 
 function signedEUR(v) { return (v >= 0 ? '+' : '−') + fmtEUR0.format(Math.abs(v)); }
+
+// One chart, two views: the multi-year MJP projection, or year-to-date
+// cumulative recurring spend vs budget (savings/investments/incidentals
+// are excluded by construction — only 'recurring' bookings feed it).
+function updateProjectionChart(agg, plan, actual, total) {
+  const view = settings.projView === 'ytd' ? 'ytd' : 'multi';
+  document.querySelectorAll('.pv').forEach(b => b.classList.toggle('bg-slate-800', b.dataset.view === view));
+  const ds = chartProjection.data.datasets;
+
+  if (view === 'ytd') {
+    const years = Object.keys(agg.monthsByYear).map(Number);
+    const year = years.length ? Math.max(...years) : new Date().getFullYear();
+    const months = [...(agg.monthsByYear[year] || [])].sort();
+    const bud = [], act = [];
+    let cb = 0, cs = 0;
+    for (const m of months) {
+      cb += settings.monthlyBudget; cs += agg.recurringSpendByMonth[m] || 0;
+      bud.push(cb); act.push(cs);
+    }
+    chartProjection.data.labels = months.map(labelMonth);
+    ds[0].label = 'Cumulative budget'; ds[0].data = bud;
+    ds[1].label = 'Cumulative recurring spend'; ds[1].data = act;
+    ds[2].data = []; ds[3].data = [];
+    const dev = cb - cs;
+    document.getElementById('proj-title').textContent = 'Year to date ' + year + ' — recurring spend vs budget';
+    document.getElementById('proj-subtitle').textContent =
+      months.length + ' loaded month(s) · savings, investments & incidentals excluded · ' +
+      (dev >= 0 ? fmtEUR0.format(dev) + ' under budget' : fmtEUR0.format(-dev) + ' OVER budget');
+  } else {
+    const labels = [];
+    for (let i = 0; i <= settings.horizon; i++) labels.push(String(PROJECTION_START_YEAR + i));
+    chartProjection.data.labels = labels;
+    ds[0].label = 'Plan (MJP)'; ds[0].data = plan;
+    ds[1].label = 'Actual (incl. loaded data)'; ds[1].data = actual;
+    ds[2].data = labels.map(() => CRITICAL_THRESHOLD);
+    ds[3].data = total;
+    document.getElementById('proj-title').textContent = 'Net worth projection — corrected MJP model';
+    document.getElementById('proj-subtitle').textContent =
+      'Op. resultaat − investeringen − incidentelen per jaar · click "Incl. invested capital" in the legend to add the beleggingspot';
+  }
+  chartProjection.update();
+}
 
 function renderSavings(agg) {
   const s = agg.savings, inv = agg.invest;
@@ -1507,6 +1555,15 @@ function bindSettings() {
     });
   }
 }
+
+// Projection view toggle (multi-year ↔ YTD vs budget)
+document.getElementById('proj-view').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.pv');
+  if (!b) return;
+  settings.projView = b.dataset.view;
+  saveJSON(LS_KEYS.settings, settings);
+  recomputeAll();
+});
 
 // "⚙ settings" links: scroll to the panel and flash it so it's easy to find
 document.addEventListener('click', (ev) => {
