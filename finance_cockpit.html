@@ -241,8 +241,8 @@
       <h2 class="font-semibold text-white">Manage projects &amp; budgets</h2>
       <button id="btn-add-project" class="ml-auto text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg">+ Add project</button>
     </div>
-    <p class="text-[11px] text-slate-500 mb-3">Rename, re-budget, re-schedule, add or remove sub-project categories. These drive the triage dropdowns, the tracker above <b>and the plan line of the projection</b> — removing a project or changing its budget/year recalculates the MJP graph. Renaming a project re-labels every transaction already mapped to it. Changes persist in localStorage.</p>
-    <div id="proj-list" class="space-y-2"></div>
+    <p class="text-[11px] text-slate-500 mb-3">The complete MJP "Incidentieel" breakdown, one row per item with its planned <b>year</b>. Rename, re-budget, re-schedule, add or remove — these drive the triage dropdowns, the tracker above <b>and the projection's plan line</b>; changing an item's year moves its budget to that year. Tick <b>done</b> on a finished project and the plan switches to the <b>actual</b> spend instead of the budget (the unused budget is freed). Renaming re-labels mapped transactions. Persists in localStorage.</p>
+    <div id="proj-list" class="space-y-2 max-h-96 overflow-y-auto pr-1"></div>
   </section>
 
   <!-- Transactions -->
@@ -467,12 +467,10 @@ const OP_RESULT = { 2026: 21741.24, 2027: 6250.18, 2028: 8779.56, 2029: 22996.31
 // MJP "Toekomstige vermogens" — yearly transfers into the beleggingsrekening
 const INVESTMENTS = { 2026: 11300, 2027: 11526, 2028: 11526, 2029: 11526, 2030: 11526, 2031: 11526 };
 
-// MJP incidental items NOT tracked as named projects (yearly onvoorzien and
-// small leftovers): the remainder of the sheet's yearly totals after the
-// default project budgets. The named projects are summed live from the project
-// list, so adding, removing or re-budgeting a project recalculates the plan.
-const UNNAMED_INCIDENTALS = { 2026: 950, 2027: 2000, 2028: 4900, 2029: 2450, 2030: 3500, 2031: 2000 };
-const PLANNED_INCIDENTAL_TAIL = 2000; // "Onvoorzien" beyond the MJP horizon
+// Every MJP incidental line is now a project (see DEFAULT_PROJECTS), so the
+// planned incidental per year is summed live from the project list. Only the
+// open-ended "onvoorzien" beyond the sheet horizon is a fixed tail.
+const PLANNED_INCIDENTAL_TAIL = 2000; // "Onvoorzien" beyond the MJP horizon (2031)
 
 const PLAN_START_NET_WORTH = 34079;   // MJP start position
 const CRITICAL_THRESHOLD = 15000;     // MJP "Kritieke vermogensgrens"
@@ -484,17 +482,34 @@ const PROJECTION_START_YEAR = 2026;
 // year = the MJP year the budget is planned in. Actual spend on a project is
 // deducted in the year it really happens and relieves the budget (up to its
 // amount) in the planned year — early, late, cheaper or more expensive all work.
+// Mark a project `done` and the plan uses ACTUAL spend instead of the budget
+// (the full remaining budget is released). This is the complete "Incidentieel"
+// breakdown from the MJP sheet; per-year sums reconcile to "Totaal incidentieel".
 const DEFAULT_PROJECTS = [
-  { name: 'Badkamer', budget: 12000, year: 2027 },
-  { name: 'Auto', budget: 30000, year: 2030 },
+  { name: 'Belastingreservering Suus', budget: 6300, year: 2026 },
   { name: 'Warmtepomp', budget: 11000, year: 2026 },
-  { name: 'Dakkapel', budget: 15000, year: 2031 },
-  { name: 'Kantoor', budget: 1200, year: 2026 },
-  { name: 'Trapkast', budget: 750, year: 2026 },
-  { name: 'Tuin', budget: 5931, year: 2026 },     // Tuinverbouwing 4831 + 350 + 750
-  { name: 'Keuken / Witgoed', budget: 5150, year: 2026 }, // Oven 900 + Inductie 1300 + Magnetron 700 + Witgoed 2250
+  { name: 'Kantoor afmaken', budget: 1200, year: 2026 },
+  { name: 'Trapkast bouwen', budget: 750, year: 2026 },
   { name: 'Bedombouw', budget: 450, year: 2026 },
-  { name: 'Onvoorzien / Overig', budget: 1500, year: 2026 }
+  { name: 'Oven', budget: 900, year: 2026 },
+  { name: 'Tuinverbouwing', budget: 4831, year: 2026 },
+  { name: 'Nieuwe badkamer', budget: 12000, year: 2027 },
+  { name: 'Inductieplaat', budget: 1300, year: 2028 },
+  { name: 'Magnetron', budget: 700, year: 2028 },
+  { name: 'Tuinverbouwing II', budget: 350, year: 2028 },
+  { name: 'Witgoed', budget: 750, year: 2028 },
+  { name: 'Witgoed II', budget: 750, year: 2029 },
+  { name: 'Nieuwe auto', budget: 30000, year: 2030 },
+  { name: 'Tuinverbouwing III', budget: 750, year: 2030 },
+  { name: 'Witgoed III', budget: 750, year: 2030 },
+  { name: 'Dakkapel', budget: 15000, year: 2031 },
+  // Onvoorzien = the MJP's yearly contingency, kept as its own per-year buckets
+  { name: 'Onvoorzien 2026', budget: 1500, year: 2026 },
+  { name: 'Onvoorzien 2027', budget: 2000, year: 2027 },
+  { name: 'Onvoorzien 2028', budget: 1800, year: 2028 },
+  { name: 'Onvoorzien 2029', budget: 1700, year: 2029 },
+  { name: 'Onvoorzien 2030', budget: 2000, year: 2030 },
+  { name: 'Onvoorzien 2031', budget: 2000, year: 2031 }
 ];
 
 // Household accounts: the checking account itself + joint savings account.
@@ -520,7 +535,13 @@ const DEFAULT_SETTINGS = {
   projView: 'multi'                           // projection chart view: 'multi' | 'ytd'
 };
 
-const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v1' };
+const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2' };
+
+// v1→v2 project rename map: the old coarse buckets became the sheet's exact items
+const PROJECT_RENAMES_V2 = {
+  'Badkamer': 'Nieuwe badkamer', 'Auto': 'Nieuwe auto', 'Kantoor': 'Kantoor afmaken',
+  'Trapkast': 'Trapkast bouwen', 'Tuin': 'Tuinverbouwing', 'Keuken / Witgoed': 'Oven'
+};
 
 /* ================================================================
    3. STATE + PERSISTENCE
@@ -541,13 +562,29 @@ if (!settings) {
 for (const k in DEFAULT_SETTINGS) if (settings[k] === undefined) settings[k] = DEFAULT_SETTINGS[k];
 let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
-let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
-// Migrate stored projects that predate planned years
-for (const p of projects) {
-  if (!p.year) {
-    const d = DEFAULT_PROJECTS.find(dp => dp.name === p.name);
-    p.year = d ? d.year : PROJECTION_START_YEAR;
+let projects = loadJSON(LS_KEYS.projects);
+if (!projects) {
+  // Fresh, or migrating from the old v1 project list → seed the full MJP
+  // breakdown and re-point any existing transaction triage to the new names.
+  projects = DEFAULT_PROJECTS.map(p => ({ ...p }));
+  if (loadJSON('fc.projects.v1')) {
+    for (const id in overrides) {
+      const o = overrides[id];
+      if (!o || !o.project) continue;
+      if (PROJECT_RENAMES_V2[o.project]) o.project = PROJECT_RENAMES_V2[o.project];
+      else if (o.project === 'Onvoorzien / Overig') {
+        const yr = (id.split('|')[0].split('-')[2]) || PROJECTION_START_YEAR; // id starts "dd-mm-yyyy"
+        o.project = 'Onvoorzien ' + yr;
+      }
+    }
+    saveJSON(LS_KEYS.overrides, overrides);
   }
+  saveJSON(LS_KEYS.projects, projects);
+}
+// Backfill fields introduced later
+for (const p of projects) {
+  if (!p.year) { const d = DEFAULT_PROJECTS.find(dp => dp.name === p.name); p.year = d ? d.year : PROJECTION_START_YEAR; }
+  if (p.done === undefined) p.done = false;
 }
 let activeFilter = 'all';
 let catFilter = settings.catFilter ? new Set(settings.catFilter) : null; // null = all categories shown
@@ -643,15 +680,21 @@ function mergeTransactions(newTxs) {
 /* ================================================================
    5. FUZZY TRIAGE ENGINE
    ================================================================ */
-function guessProject(text) {
+function guessProject(t) {
+  const text = t.name + ' ' + t.desc;
   if (/HEATTRANSFORMERS|WARMTEPOMP/i.test(text)) return 'Warmtepomp';
-  if (/BADKAMER|SANITAIR/i.test(text)) return 'Badkamer';
+  if (/BADKAMER|SANITAIR/i.test(text)) return 'Nieuwe badkamer';
   if (/DAKKAPEL/i.test(text)) return 'Dakkapel';
-  if (/KEUKEN|OVEN|INDUCTIE|MAGNETRON/i.test(text)) return 'Keuken / Witgoed';
-  if (/AUTO|GARAGE/i.test(text)) return 'Auto';
-  if (/TUIN|PERGOLA|PERGULA/i.test(text)) return 'Tuin';
-  if (/KAST/i.test(text)) return 'Trapkast';
-  return 'Onvoorzien / Overig';
+  if (/INDUCTIE/i.test(text)) return 'Inductieplaat';
+  if (/MAGNETRON/i.test(text)) return 'Magnetron';
+  if (/OVEN|KEUKEN/i.test(text)) return 'Oven';
+  if (/WITGOED|VAATWAS|KOELKAST|WASMACHINE|WASDROGER|VRIEZER/i.test(text)) return 'Witgoed';
+  if (/AUTO|GARAGE/i.test(text)) return 'Nieuwe auto';
+  if (/TUIN|PERGOLA|PERGULA/i.test(text)) return 'Tuinverbouwing';
+  if (/KAST/i.test(text)) return 'Trapkast bouwen';
+  if (/BELASTING/i.test(text)) return 'Belastingreservering Suus';
+  // Fall back to that year's onvoorzien bucket so unbudgeted incidentals are relieved
+  return 'Onvoorzien ' + t.date.slice(0, 4);
 }
 
 // Bank category honouring a manual override (read directly, never via effective(),
@@ -711,7 +754,7 @@ function autoClassify(t) {
   const text = t.name + ' ' + t.desc;
   const big = Math.abs(t.amount) > settings.threshold;
   if (big && (HW_TERMS.test(text) || HW_BANK_CATS.includes(bankCat))) {
-    return { cls: 'incidental', project: guessProject(text) };
+    return { cls: 'incidental', project: guessProject(t) };
   }
   return { cls: 'recurring', project: '' };
 }
@@ -733,7 +776,7 @@ function effective(t) {
 function aggregate(txList) {
   const list = txList || transactions;
   const agg = {
-    months: new Set(), monthsByYear: {}, recurringSpendByYear: {}, recurringSpendByMonth: {},
+    months: new Set(), monthsByYear: {}, recurringSpendByYear: {}, recurringSpendByMonth: {}, recurringIncomeByMonth: {},
     recurringIncome: 0, recurringSpend: 0,
     incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
     excludedTotal: 0,
@@ -788,13 +831,15 @@ function aggregate(txList) {
     if (e.cls === 'incidental') {
       // negative amount = deduction; refunds (positive) reduce the dent
       agg.incidentalNetByYear[year] = (agg.incidentalNetByYear[year] || 0) - t.amount;
-      const proj = e.project || 'Onvoorzien / Overig';
+      const proj = e.project || ('Onvoorzien ' + year);
       agg.incidentalByProject[proj] = (agg.incidentalByProject[proj] || 0) - t.amount;
       agg.incidentalTotal -= t.amount;
       agg.incidentalCount++;
     } else { // recurring
-      if (t.amount > 0) agg.recurringIncome += t.amount;
-      else {
+      if (t.amount > 0) {
+        agg.recurringIncome += t.amount;
+        agg.recurringIncomeByMonth[month] = (agg.recurringIncomeByMonth[month] || 0) + t.amount;
+      } else {
         agg.recurringSpend += -t.amount;
         agg.recurringSpendByYear[year] = (agg.recurringSpendByYear[year] || 0) - t.amount;
         agg.recurringSpendByMonth[month] = (agg.recurringSpendByMonth[month] || 0) - t.amount;
@@ -891,8 +936,7 @@ function investmentForYear(year) {
   return INVESTMENTS[year] !== undefined ? INVESTMENTS[year] : grown(INVESTMENTS[2031], year);
 }
 function plannedIncidentalForYear(year) {
-  let total = UNNAMED_INCIDENTALS[year] !== undefined ? UNNAMED_INCIDENTALS[year]
-            : (year > 2031 ? grown(PLANNED_INCIDENTAL_TAIL, year) : 0);
+  let total = year > 2031 ? grown(PLANNED_INCIDENTAL_TAIL, year) : 0; // open-ended onvoorzien
   for (const p of projects) if ((p.year || PROJECTION_START_YEAR) === year) total += (p.budget || 0);
   return total;
 }
@@ -901,14 +945,18 @@ function projectSeries(agg) {
   const offset = settings.startNetWorth - PLAN_START_NET_WORTH; // shift if your real start differs from the sheet
   const r = settings.returnRate / 100;
 
-  // Budget relief per planned year: what you already spent on a project no
-  // longer needs to be paid in the year the MJP scheduled it for.
+  // Budget relief per planned year. While a project is open we only release the
+  // part already spent (the rest of the budget still looms). Once it is `done`
+  // the full budget is released, so the plan reflects the ACTUAL spend — cheaper
+  // finishes are credited and overruns are charged in full.
   const relief = {};
   for (const p of projects) {
+    if (!(p.budget > 0)) continue;
     const spent = Math.max(0, agg.incidentalByProject[p.name] || 0);
-    if (!spent || !(p.budget > 0)) continue;
+    const released = p.done ? p.budget : Math.min(p.budget, spent);
+    if (!released) continue;
     const y = p.year || PROJECTION_START_YEAR;
-    relief[y] = (relief[y] || 0) + Math.min(p.budget, spent);
+    relief[y] = (relief[y] || 0) + released;
   }
 
   const start = PLAN_START_NET_WORTH + offset;
@@ -962,7 +1010,7 @@ const chartProjection = new Chart(document.getElementById('chart-projection'), {
     plugins: { legend: { labels: { boxWidth: 14,
         filter: (item, data) => data.datasets[item.datasetIndex].data.length > 0 } },
       tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR0.format(c.parsed.y)}` } } },
-    scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } } }
+    scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(Math.abs(v) < 10000 ? 1 : 0) + 'k' } } }
   }
 });
 
@@ -1050,9 +1098,10 @@ function recomputeAll() {
 
 function signedEUR(v) { return (v >= 0 ? '+' : '−') + fmtEUR0.format(Math.abs(v)); }
 
-// One chart, two views: the multi-year MJP projection, or year-to-date
-// cumulative recurring spend vs budget (savings/investments/incidentals
-// are excluded by construction — only 'recurring' bookings feed it).
+// One chart, two views: the multi-year MJP projection, or year-to-date monthly
+// balance (recurring income − recurring spend) — actual vs the planned monthly
+// operational result. Savings/investments/incidentals are excluded by
+// construction; only 'recurring' bookings feed the YTD view.
 function updateProjectionChart(agg, plan, actual, total) {
   const view = settings.projView === 'ytd' ? 'ytd' : 'multi';
   document.querySelectorAll('.pv').forEach(b => b.classList.toggle('bg-slate-800', b.dataset.view === view));
@@ -1062,21 +1111,23 @@ function updateProjectionChart(agg, plan, actual, total) {
     const years = Object.keys(agg.monthsByYear).map(Number);
     const year = years.length ? Math.max(...years) : new Date().getFullYear();
     const months = [...(agg.monthsByYear[year] || [])].sort();
+    const budMonthly = opResultForYear(year) / 12; // planned monthly net (earnings − spend)
     const bud = [], act = [];
-    let cb = 0, cs = 0;
+    let sumBud = 0, sumAct = 0;
     for (const m of months) {
-      cb += settings.monthlyBudget; cs += agg.recurringSpendByMonth[m] || 0;
-      bud.push(cb); act.push(cs);
+      const bal = (agg.recurringIncomeByMonth[m] || 0) - (agg.recurringSpendByMonth[m] || 0);
+      bud.push(budMonthly); act.push(bal);
+      sumBud += budMonthly; sumAct += bal;
     }
     chartProjection.data.labels = months.map(labelMonth);
-    ds[0].label = 'Cumulative budget'; ds[0].data = bud;
-    ds[1].label = 'Cumulative recurring spend'; ds[1].data = act;
+    ds[0].label = 'Budget balance / mo'; ds[0].data = bud;
+    ds[1].label = 'Actual balance / mo'; ds[1].data = act;
     ds[2].data = []; ds[3].data = [];
-    const dev = cb - cs;
-    document.getElementById('proj-title').textContent = 'Year to date ' + year + ' — recurring spend vs budget';
+    const dev = sumAct - sumBud;
+    document.getElementById('proj-title').textContent = 'Year to date ' + year + ' — monthly balance vs budget';
     document.getElementById('proj-subtitle').textContent =
-      months.length + ' loaded month(s) · savings, investments & incidentals excluded · ' +
-      (dev >= 0 ? fmtEUR0.format(dev) + ' under budget' : fmtEUR0.format(-dev) + ' OVER budget');
+      months.length + ' loaded month(s) · recurring income − spend, one-offs excluded · YTD ' +
+      (dev >= 0 ? signedEUR(dev) + ' ahead of plan' : signedEUR(dev) + ' behind plan');
   } else {
     const labels = [];
     for (let i = 0; i <= settings.horizon; i++) labels.push(String(PROJECTION_START_YEAR + i));
@@ -1197,7 +1248,7 @@ function renderIncidentalTracker(agg) {
     return `
       <div>
         <div class="flex justify-between items-baseline text-xs mb-1">
-          <span class="font-medium text-slate-200">${esc(p.name)}${p.year ? ` <span class="text-slate-500 font-normal">’${String(p.year).slice(2)}</span>` : ''}</span>
+          <span class="font-medium text-slate-200">${esc(p.name)}${p.year ? ` <span class="text-slate-500 font-normal">’${String(p.year).slice(2)}</span>` : ''}${p.done ? ' <span class="text-emerald-400 font-normal">✓done</span>' : ''}</span>
           <span class="text-slate-400">${fmtEUR0.format(spent)} <span class="text-slate-600">/ ${fmtEUR0.format(budget)}</span>
             <span class="${over ? 'text-rose-400' : 'text-slate-500'} ml-1">${pctLabel}</span></span>
         </div>
@@ -1224,6 +1275,9 @@ function renderProjects() {
         <input type="number" step="50" min="0" class="proj-budget w-32 bg-slate-800 border border-slate-700 rounded-lg pl-5 pr-2 py-1.5 text-sm text-slate-100" value="${p.budget}" placeholder="Budget">
       </div>
       <input type="number" step="1" min="2026" max="2055" class="proj-year w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-slate-100" value="${p.year || PROJECTION_START_YEAR}" title="Planned year (MJP)">
+      <label class="flex items-center gap-1 text-[11px] text-slate-400 select-none" title="Mark finished: the plan uses the actual spend instead of the budget">
+        <input type="checkbox" class="proj-done accent-emerald-500" ${p.done ? 'checked' : ''}>done
+      </label>
       <button class="proj-del text-sm font-semibold bg-slate-800 hover:bg-rose-900 text-slate-400 hover:text-rose-200 px-3 py-1.5 rounded-lg border border-slate-700" title="Remove project">✕</button>
     </div>`).join('');
 }
@@ -1486,6 +1540,10 @@ document.getElementById('proj-list').addEventListener('change', (ev) => {
     ev.target.value = projects[idx].year;
     saveJSON(LS_KEYS.projects, projects);
     recomputeAll();
+  } else if (ev.target.classList.contains('proj-done')) {
+    projects[idx].done = ev.target.checked;
+    saveJSON(LS_KEYS.projects, projects);
+    recomputeAll();
   }
 });
 document.getElementById('proj-list').addEventListener('click', (ev) => {
@@ -1505,7 +1563,7 @@ document.getElementById('proj-list').addEventListener('click', (ev) => {
 document.getElementById('btn-add-project').addEventListener('click', () => {
   let n = 1, name;
   do { name = 'New project' + (n === 1 ? '' : ' ' + n); n++; } while (projects.some(p => p.name === name));
-  projects.push({ name, budget: 0, year: PROJECTION_START_YEAR });
+  projects.push({ name, budget: 0, year: PROJECTION_START_YEAR, done: false });
   saveJSON(LS_KEYS.projects, projects);
   renderProjects();
   recomputeAll();
