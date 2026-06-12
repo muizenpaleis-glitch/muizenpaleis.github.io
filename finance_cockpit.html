@@ -119,6 +119,18 @@
           <span class="text-[11px] text-slate-400">Incidental threshold (€)</span>
           <input id="set-threshold" type="number" step="10" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100">
         </label>
+        <label class="block">
+          <span class="text-[11px] text-slate-400">Savings incidental threshold (€)</span>
+          <input id="set-savingsIncidentalThreshold" type="number" step="50" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100">
+        </label>
+        <label class="block col-span-2">
+          <span class="text-[11px] text-slate-400">Savings account IBAN(s) <span class="text-slate-600">— comma separated</span></span>
+          <input id="set-savingsAccounts" type="text" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100 font-mono text-xs">
+        </label>
+        <label class="block col-span-2">
+          <span class="text-[11px] text-slate-400">Investment account IBAN(s) <span class="text-slate-600">— comma separated, one-way injections</span></span>
+          <input id="set-investmentAccounts" type="text" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-100 font-mono text-xs">
+        </label>
       </div>
       <p class="text-[11px] leading-relaxed text-slate-500">
         Corrected MJP model: NW<sub>y</sub> = NW<sub>y−1</sub>·(1+r) + operationeel resultaat − toekomstige vermogens (€11.3–11.5k/yr)
@@ -149,6 +161,69 @@
     </div>
     <p class="text-[11px] text-slate-500 mb-4">Live total of every transaction triaged as <span class="text-orange-400 font-semibold">[Incidental Project]</span>, grouped by sub-project, against the planned budget from your multi-year plan. Refunds reduce the spent amount.</p>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="inc-tracker"></div>
+  </section>
+
+  <!-- Savings & investments -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h2 class="font-semibold text-white">Savings &amp; investments</h2>
+      <span id="sav-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-4">
+      Transfers to/from your savings account(s) netted into a savings balance. Large one-off movements
+      (≥ the threshold in settings) are flagged <span class="text-amber-400 font-semibold">incidental</span> and excluded from the
+      <b>regular</b> net, which captures the monthly saving rhythm — including the small bookings back to current that quietly eat into it.
+      Use the toggle on any row to reclassify. Investments are treated as one-way yearly injections.
+    </p>
+
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-4">
+      <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Regular net / mo</div>
+        <div id="sav-netreg-mo" class="text-lg font-bold mt-1">—</div>
+        <div class="text-[11px] text-slate-500 mt-0.5">excl. incidental</div>
+      </div>
+      <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Regular net (total)</div>
+        <div id="sav-netreg" class="text-lg font-bold mt-1">—</div>
+        <div id="sav-netreg-sub" class="text-[11px] text-slate-500 mt-0.5"></div>
+      </div>
+      <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Net incl. incidental</div>
+        <div id="sav-net" class="text-lg font-bold text-slate-200 mt-1">—</div>
+        <div id="sav-net-sub" class="text-[11px] text-slate-500 mt-0.5"></div>
+      </div>
+      <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Taken back / mo</div>
+        <div id="sav-back-mo" class="text-lg font-bold text-rose-300 mt-1">—</div>
+        <div class="text-[11px] text-slate-500 mt-0.5">regular only</div>
+      </div>
+      <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Invested (injections)</div>
+        <div id="sav-invest" class="text-lg font-bold text-violet-300 mt-1">—</div>
+        <div id="sav-invest-sub" class="text-[11px] text-slate-500 mt-0.5"></div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div>
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Monthly savings rhythm</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead class="text-slate-500 border-b border-slate-800">
+              <tr><th class="text-left py-1.5">Month</th><th class="text-right">In</th><th class="text-right">Out</th>
+                  <th class="text-right">Net</th><th class="text-right text-slate-400">Regular net</th></tr>
+            </thead>
+            <tbody id="sav-month-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Bookings <span class="font-normal normal-case text-slate-600">— toggle incidental</span></h3>
+        <div id="sav-items" class="space-y-1 max-h-72 overflow-y-auto pr-1"></div>
+        <h3 id="inv-head" class="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2 hidden">Investment injections by year</h3>
+        <div id="inv-years" class="space-y-1"></div>
+      </div>
+    </div>
   </section>
 
   <!-- Manage projects -->
@@ -425,7 +500,11 @@ const DEFAULT_SETTINGS = {
   horizon: 15,                 // years
   savingsGrowth: 2,            // % growth of S_y beyond 2031 (MJP inflation factor)
   monthlyBudget: MONTHLY_RECURRING_BUDGET,
-  threshold: 200               // €5.323/mo ÷ 30,4 ≈ €175/day × 1,15 ≈ €200
+  threshold: 200,              // €5.323/mo ÷ 30,4 ≈ €175/day × 1,15 ≈ €200
+  // Savings & investments
+  savingsAccounts: ['NL16ASNB8851233608'],   // joint savings account(s) — counterparty IBAN
+  investmentAccounts: [],                     // broker / investment account(s) — none in the data yet
+  savingsIncidentalThreshold: 1500            // |€| at/above which a savings movement auto-counts as incidental
 };
 
 const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v1' };
@@ -445,6 +524,8 @@ if (!settings) {
     settings = { ...DEFAULT_SETTINGS };
   }
 }
+// Backfill any settings introduced after this browser last saved
+for (const k in DEFAULT_SETTINGS) if (settings[k] === undefined) settings[k] = DEFAULT_SETTINGS[k];
 let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
 let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
@@ -567,10 +648,27 @@ function effBankCat(t) {
   return o && o.bankCat ? o.bankCat : t.bankCat;
 }
 
+// Is this booking a transfer to/from one of the tracked savings or investment
+// accounts? Such transfers move money between your own pockets — never spending.
+function isSavingsTransfer(t) {
+  return !!(t.iban && (settings.savingsAccounts || []).includes(t.iban));
+}
+function isInvestmentTransfer(t) {
+  return !!(t.iban && (settings.investmentAccounts || []).includes(t.iban));
+}
+// A savings movement counts as "incidental" (a big one-off, e.g. funding a
+// planned goal) above the threshold, unless the user has flagged it by hand.
+function savingsIsIncidental(t) {
+  const o = overrides[t.id];
+  if (o && o.savingsInc !== undefined) return o.savingsInc;
+  return Math.abs(t.amount) >= (settings.savingsIncidentalThreshold || 1500);
+}
+
 function autoClassify(t) {
   const bankCat = effBankCat(t);
-  // Internal transfers between own household accounts → exclude
+  // Internal transfers between own household / savings / investment accounts → exclude
   if (t.iban && OWN_ACCOUNTS.includes(t.iban)) return { cls: 'exclude', project: '' };
+  if (isSavingsTransfer(t) || isInvestmentTransfer(t)) return { cls: 'exclude', project: '' };
   if (bankCat === 'Sparen') return { cls: 'exclude', project: '' };
 
   const text = t.name + ' ' + t.desc;
@@ -602,7 +700,9 @@ function aggregate(txList) {
     recurringIncome: 0, recurringSpend: 0,
     incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
     excludedTotal: 0,
-    spendByCat: {}, flowByMonth: {}
+    spendByCat: {}, flowByMonth: {},
+    savings: { byMonth: {}, deposit: 0, withdraw: 0, depositInc: 0, withdrawInc: 0, count: 0, items: [] },
+    invest: { byYear: {}, total: 0, count: 0, items: [] }
   };
   for (const t of list) {
     const e = effective(t);
@@ -610,6 +710,29 @@ function aggregate(txList) {
     const year = parseInt(t.date.slice(0, 4), 10);
     agg.months.add(month);
     (agg.monthsByYear[year] = agg.monthsByYear[year] || new Set()).add(month);
+
+    // Savings & investment transfers — tracked separately (they're excluded from
+    // spending below, but we still want a net-savings and injections view).
+    if (isSavingsTransfer(t)) {
+      const inc = savingsIsIncidental(t);
+      const sm = agg.savings.byMonth[month] ||
+        (agg.savings.byMonth[month] = { deposit: 0, withdraw: 0, depositReg: 0, withdrawReg: 0 });
+      if (t.amount < 0) { // money leaving current → into savings
+        agg.savings.deposit += -t.amount; sm.deposit += -t.amount;
+        if (inc) agg.savings.depositInc += -t.amount; else sm.depositReg += -t.amount;
+      } else {            // money coming back from savings → into current
+        agg.savings.withdraw += t.amount; sm.withdraw += t.amount;
+        if (inc) agg.savings.withdrawInc += t.amount; else sm.withdrawReg += t.amount;
+      }
+      agg.savings.count++;
+      agg.savings.items.push({ id: t.id, date: t.date, desc: (t.desc || t.name || '').trim(),
+        amount: t.amount, incidental: inc });
+    }
+    if (isInvestmentTransfer(t) && t.amount < 0) {
+      agg.invest.byYear[year] = (agg.invest.byYear[year] || 0) + (-t.amount);
+      agg.invest.total += -t.amount; agg.invest.count++;
+      agg.invest.items.push({ id: t.id, date: t.date, desc: (t.desc || t.name || '').trim(), amount: t.amount });
+    }
 
     if (e.cls === 'exclude') {
       agg.excludedTotal += Math.abs(t.amount);
@@ -648,6 +771,16 @@ function aggregate(txList) {
     agg.deviationByYear[y] = d;
     agg.deviationTotal += d;
   }
+  // Net savings: everything vs. only the regular (small, recurring) movements
+  const s = agg.savings;
+  s.net = s.deposit - s.withdraw;
+  s.depositReg = s.deposit - s.depositInc;
+  s.withdrawReg = s.withdraw - s.withdrawInc;
+  s.netReg = s.depositReg - s.withdrawReg;
+  s.monthCount = Math.max(Object.keys(s.byMonth).length, 1);
+  s.netRegPerMonth = s.netReg / s.monthCount;
+  s.items.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+  agg.invest.items.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
   return agg;
 }
 
@@ -677,6 +810,7 @@ function periodsFor(gran) {
   return [...set].sort();
 }
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function labelMonth(p) { const [y, m] = p.split('-'); return MONTH_NAMES[parseInt(m, 10) - 1] + ' ' + y; }
 function labelPeriod(p) {
   if (timeGran === 'month') { const [y, m] = p.split('-'); return MONTH_NAMES[parseInt(m, 10) - 1] + ' ' + y; }
   return p;
@@ -871,6 +1005,75 @@ function recomputeAll() {
   chartCashflow.update();
 
   renderIncidentalTracker(aggFull);
+  renderSavings(aggFull);
+}
+
+function signedEUR(v) { return (v >= 0 ? '+' : '−') + fmtEUR0.format(Math.abs(v)); }
+
+function renderSavings(agg) {
+  const s = agg.savings, inv = agg.invest;
+
+  // Headline KPIs
+  const setNet = (id, v) => {
+    const el = document.getElementById(id);
+    el.textContent = signedEUR(v);
+    el.className = 'text-lg font-bold mt-1 ' + (v >= 0 ? 'text-emerald-400' : 'text-rose-400');
+  };
+  setNet('sav-netreg-mo', s.netRegPerMonth);
+  setNet('sav-netreg', s.netReg);
+  document.getElementById('sav-netreg-sub').textContent =
+    fmtEUR0.format(s.depositReg) + ' in · ' + fmtEUR0.format(s.withdrawReg) + ' out';
+  document.getElementById('sav-net').textContent = signedEUR(s.net);
+  document.getElementById('sav-net-sub').textContent =
+    fmtEUR0.format(s.deposit) + ' in · ' + fmtEUR0.format(s.withdraw) + ' out';
+  document.getElementById('sav-back-mo').textContent = fmtEUR0.format(s.withdrawReg / s.monthCount);
+  document.getElementById('sav-invest').textContent = fmtEUR0.format(inv.total);
+  document.getElementById('sav-invest-sub').textContent =
+    inv.count ? inv.count + ' injection(s)' : (settings.investmentAccounts || []).length ? 'none yet' : 'no account set';
+
+  document.getElementById('sav-summary').textContent =
+    s.count + ' savings booking(s) · ' + (Object.keys(s.byMonth).length) + ' month(s)';
+
+  // Monthly rhythm table
+  const months = Object.keys(s.byMonth).sort();
+  const rows = months.map(m => {
+    const x = s.byMonth[m];
+    const net = x.deposit - x.withdraw, netReg = x.depositReg - x.withdrawReg;
+    const cls = v => v >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    return `<tr class="border-b border-slate-800/60">
+      <td class="py-1.5 text-slate-300">${esc(labelMonth(m))}</td>
+      <td class="text-right text-emerald-300/80">${fmtEUR0.format(x.deposit)}</td>
+      <td class="text-right text-rose-300/80">${x.withdraw ? fmtEUR0.format(x.withdraw) : '—'}</td>
+      <td class="text-right font-medium ${cls(net)}">${signedEUR(net)}</td>
+      <td class="text-right ${cls(netReg)}">${signedEUR(netReg)}</td>
+    </tr>`;
+  });
+  document.getElementById('sav-month-body').innerHTML =
+    rows.join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-600">No savings transfers detected. Set the savings IBAN in settings.</td></tr>';
+
+  // Individual bookings with incidental toggle
+  document.getElementById('sav-items').innerHTML = s.items.map(it => {
+    const into = it.amount < 0;
+    return `<div class="flex items-center gap-2 text-xs bg-slate-800/40 rounded-lg px-2 py-1.5" data-sav-id="${esc(it.id)}">
+      <span class="w-14 text-slate-500">${esc(it.date.slice(5))}</span>
+      <span class="w-16 text-right font-medium ${into ? 'text-emerald-300' : 'text-rose-300'}">${into ? '+' : '−'}${fmtEUR0.format(Math.abs(it.amount))}</span>
+      <span class="text-[10px] uppercase tracking-wide ${into ? 'text-emerald-500/70' : 'text-rose-500/70'} w-8">${into ? 'in' : 'out'}</span>
+      <span class="flex-1 truncate text-slate-400" title="${esc(it.desc)}">${esc(it.desc) || '—'}</span>
+      <button class="sav-inc-toggle text-[10px] font-semibold px-2 py-0.5 rounded border ${it.incidental
+        ? 'bg-amber-900/40 border-amber-700 text-amber-300'
+        : 'bg-slate-800 border-slate-700 text-slate-500'}" title="Toggle incidental (excluded from regular net)">${it.incidental ? 'incidental' : 'regular'}</button>
+    </div>`;
+  }).join('') || '<div class="text-xs text-slate-600 py-2">No savings bookings.</div>';
+
+  // Investment injections by year
+  const invHead = document.getElementById('inv-head');
+  const invYears = Object.keys(inv.byYear).sort();
+  invHead.classList.toggle('hidden', invYears.length === 0);
+  document.getElementById('inv-years').innerHTML = invYears.map(y =>
+    `<div class="flex justify-between text-xs bg-violet-950/30 border border-violet-900/40 rounded-lg px-2 py-1.5">
+      <span class="text-slate-300">${y}</span>
+      <span class="font-medium text-violet-300">${fmtEUR0.format(inv.byYear[y])}</span>
+    </div>`).join('');
 }
 
 function renderIncidentalTracker(agg) {
@@ -1217,8 +1420,17 @@ const SETTING_INPUTS = [
   ['set-horizon', 'horizon', v => Math.min(30, Math.max(5, parseInt(v, 10) || 15))],
   ['set-savingsGrowth', 'savingsGrowth', parseFloat],
   ['set-monthlyBudget', 'monthlyBudget', parseFloat],
-  ['set-threshold', 'threshold', parseFloat]
+  ['set-threshold', 'threshold', parseFloat],
+  ['set-savingsIncidentalThreshold', 'savingsIncidentalThreshold', parseFloat]
 ];
+// IBAN list fields: comma/space/newline separated, uppercased
+const IBAN_INPUTS = [
+  ['set-savingsAccounts', 'savingsAccounts'],
+  ['set-investmentAccounts', 'investmentAccounts']
+];
+function parseIbans(str) {
+  return str.split(/[\s,;]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+}
 function bindSettings() {
   for (const [elId, key, cast] of SETTING_INPUTS) {
     const el = document.getElementById(elId);
@@ -1232,7 +1444,33 @@ function bindSettings() {
       renderTable(); // threshold changes can re-flag rows
     });
   }
+  for (const [elId, key] of IBAN_INPUTS) {
+    const el = document.getElementById(elId);
+    el.value = (settings[key] || []).join(', ');
+    el.addEventListener('change', () => {
+      settings[key] = parseIbans(el.value);
+      el.value = settings[key].join(', ');
+      saveJSON(LS_KEYS.settings, settings);
+      recomputeAll();
+      renderTable(); // account changes re-classify transfers
+    });
+  }
 }
+
+// Savings booking: toggle incidental ↔ regular (excluded from / counted in regular net)
+document.getElementById('sav-items').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('.sav-inc-toggle');
+  if (!btn) return;
+  const row = btn.closest('[data-sav-id]');
+  if (!row) return;
+  const id = row.dataset.savId;
+  const t = transactions.find(x => x.id === id);
+  if (!t) return;
+  const current = savingsIsIncidental(t);
+  overrides[id] = { ...(overrides[id] || {}), savingsInc: !current };
+  saveJSON(LS_KEYS.overrides, overrides);
+  recomputeAll();
+});
 
 // Upload (input + drag & drop), parsed with PapaParse-backed pipeline
 function handleFiles(files) {
@@ -1297,6 +1535,7 @@ document.getElementById('btn-reset-all').addEventListener('click', () => {
 });
 function bindSettingValues() {
   for (const [elId, key] of SETTING_INPUTS) document.getElementById(elId).value = settings[key];
+  for (const [elId, key] of IBAN_INPUTS) document.getElementById(elId).value = (settings[key] || []).join(', ');
 }
 
 /* ================================================================
