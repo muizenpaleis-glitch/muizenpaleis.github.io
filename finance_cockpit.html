@@ -92,8 +92,8 @@
       </div>
       <div class="relative h-80"><canvas id="chart-projection"></canvas></div>
     </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-      <h2 class="font-semibold text-white">Projection variables <span class="text-[11px] font-normal text-slate-500">(persisted in localStorage)</span></h2>
+    <div id="settings-panel" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 transition-shadow">
+      <h2 class="font-semibold text-white">⚙ Settings <span class="text-[11px] font-normal text-slate-500">(projection, accounts &amp; thresholds — persisted in localStorage)</span></h2>
       <div class="grid grid-cols-2 gap-3 text-sm">
         <label class="block">
           <span class="text-[11px] text-slate-400">Start position 2026 (€)</span>
@@ -171,9 +171,12 @@
     </div>
     <p class="text-[11px] text-slate-500 mb-4">
       Transfers to/from your savings account(s) netted into a savings balance. Large one-off movements
-      (≥ the threshold in settings) are flagged <span class="text-amber-400 font-semibold">incidental</span> and excluded from the
+      (≥ the threshold in <a href="#settings-panel" class="sp-link text-cyan-400 hover:underline">⚙ settings</a>) are flagged
+      <span class="text-amber-400 font-semibold">incidental</span> and excluded from the
       <b>regular</b> net, which captures the monthly saving rhythm — including the small bookings back to current that quietly eat into it.
-      Use the toggle on any row to reclassify. Investments are treated as one-way yearly injections.
+      Use the toggle on any row to reclassify. Investments are one-way yearly injections: broker accounts are
+      auto-detected from the counterparty (DEGIRO, Meesman, Brand New Day, ASN Doelbeleggen, …) and can be added by IBAN in
+      <a href="#settings-panel" class="sp-link text-cyan-400 hover:underline">⚙ settings</a>.
     </p>
 
     <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-4">
@@ -222,6 +225,7 @@
         <div id="sav-items" class="space-y-1 max-h-72 overflow-y-auto pr-1"></div>
         <h3 id="inv-head" class="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2 hidden">Investment injections by year</h3>
         <div id="inv-years" class="space-y-1"></div>
+        <div id="inv-detected" class="text-[10px] text-slate-600 mt-2"></div>
       </div>
     </div>
   </section>
@@ -653,8 +657,24 @@ function effBankCat(t) {
 function isSavingsTransfer(t) {
   return !!(t.iban && (settings.savingsAccounts || []).includes(t.iban));
 }
+// Broker / investment counterparties, auto-detected by name or description.
+const INVEST_TERMS = /(DE ?GIRO|FLATEX|MEESMAN|BRAND ?NEW ?DAY|DOELBELEGGEN|BELEGGEN|BELEGGING|SAXO ?BANK|TRADE ?REPUBLIC|PEAKS|SEMMIE|SCALABLE|INTERACTIVE BROKERS|VANGUARD|BINCKBANK|\bBUX\b|\bETF\b)/i;
+// IBANs treated as investment accounts = manual list (settings) ∪ auto-detected.
+// Cached and rebuilt in recomputeAll, since autoClassify runs per transaction.
+let investIbans = new Set();
+let investDetected = [];   // auto-detected only, for display
+function rebuildInvestIbans() {
+  investIbans = new Set(settings.investmentAccounts || []);
+  const found = new Map(); // iban -> matched term
+  for (const t of transactions) {
+    if (!t.iban || investIbans.has(t.iban)) continue;
+    const m = (t.name + ' ' + t.desc).match(INVEST_TERMS);
+    if (m) { investIbans.add(t.iban); if (!found.has(t.iban)) found.set(t.iban, m[1]); }
+  }
+  investDetected = [...found.entries()].map(([iban, term]) => ({ iban, term }));
+}
 function isInvestmentTransfer(t) {
-  return !!(t.iban && (settings.investmentAccounts || []).includes(t.iban));
+  return !!(t.iban && investIbans.has(t.iban));
 }
 // A savings movement counts as "incidental" (a big one-off, e.g. funding a
 // planned goal) above the threshold, unless the user has flagged it by hand.
@@ -947,6 +967,7 @@ const chartCashflow = new Chart(document.getElementById('chart-cashflow'), {
    ================================================================ */
 function recomputeAll() {
   refreshTimeUI();
+  rebuildInvestIbans();                                    // auto-detect broker accounts before classifying
   const aggFull = aggregate(transactions);                 // drives projection, deviation, incidentals
   const aggView = aggregate(getFilteredTransactions());    // drives the time-filtered spend/earn views
   const periodTxt = activePeriodLabel();
@@ -1029,7 +1050,10 @@ function renderSavings(agg) {
   document.getElementById('sav-back-mo').textContent = fmtEUR0.format(s.withdrawReg / s.monthCount);
   document.getElementById('sav-invest').textContent = fmtEUR0.format(inv.total);
   document.getElementById('sav-invest-sub').textContent =
-    inv.count ? inv.count + ' injection(s)' : (settings.investmentAccounts || []).length ? 'none yet' : 'no account set';
+    inv.count ? inv.count + ' injection(s) · ' + Object.keys(inv.byYear).join(', ')
+    : ((settings.investmentAccounts || []).length + investDetected.length)
+      ? 'account tracked · no injections in loaded data'
+      : 'no broker found in data — add IBAN in ⚙ settings';
 
   document.getElementById('sav-summary').textContent =
     s.count + ' savings booking(s) · ' + (Object.keys(s.byMonth).length) + ' month(s)';
@@ -1074,6 +1098,10 @@ function renderSavings(agg) {
       <span class="text-slate-300">${y}</span>
       <span class="font-medium text-violet-300">${fmtEUR0.format(inv.byYear[y])}</span>
     </div>`).join('');
+  document.getElementById('inv-detected').innerHTML = investDetected.length
+    ? 'auto-detected broker account(s): ' + investDetected.map(d =>
+        `<span class="font-mono text-slate-500">${esc(d.iban)}</span> <span class="text-slate-500">(${esc(d.term)})</span>`).join(' · ')
+    : '';
 }
 
 function renderIncidentalTracker(agg) {
@@ -1456,6 +1484,17 @@ function bindSettings() {
     });
   }
 }
+
+// "⚙ settings" links: scroll to the panel and flash it so it's easy to find
+document.addEventListener('click', (ev) => {
+  const a = ev.target.closest('.sp-link');
+  if (!a) return;
+  ev.preventDefault();
+  const panel = document.getElementById('settings-panel');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  panel.classList.add('ring-2', 'ring-cyan-400');
+  setTimeout(() => panel.classList.remove('ring-2', 'ring-cyan-400'), 2000);
+});
 
 // Savings booking: toggle incidental ↔ regular (excluded from / counted in regular net)
 document.getElementById('sav-items').addEventListener('click', (ev) => {
