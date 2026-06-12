@@ -201,7 +201,7 @@
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-slate-900 z-10">
           <tr class="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-800">
-            <th class="px-3 py-2">Date</th>
+            <th id="th-date" class="px-3 py-2 cursor-pointer select-none hover:text-slate-300" title="Click to sort by date">Date <span id="sort-ind-date" class="text-cyan-400"></span></th>
             <th class="px-3 py-2">Counterparty / description</th>
             <th class="px-3 py-2">Bank category</th>
             <th id="th-amount" class="px-3 py-2 text-right cursor-pointer select-none hover:text-slate-300" title="Click to sort by amount">Amount <span id="sort-ind" class="text-cyan-400"></span></th>
@@ -916,12 +916,16 @@ function renderTable() {
 
   const view = getFilteredTransactions();
 
-  // Sort order: default is newest date first; the Amount header toggles signed high→low / low→high
+  // Sort order: default ('date') is newest first; headers toggle date old→new / amount high→low etc.
   let ordered = view;
   if (sortMode === 'amount-desc') ordered = [...view].sort((a, b) => b.amount - a.amount);
   else if (sortMode === 'amount-asc') ordered = [...view].sort((a, b) => a.amount - b.amount);
+  else if (sortMode === 'date-asc') ordered = [...view].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  // 'date' (default): view is already newest-first from mergeTransactions
   document.getElementById('sort-ind').textContent =
     sortMode === 'amount-desc' ? '↓' : sortMode === 'amount-asc' ? '↑' : '';
+  document.getElementById('sort-ind-date').textContent =
+    sortMode === 'date-asc' ? '↑' : sortMode === 'date' ? '↓' : '';
 
   maybeRebuildCatList();
 
@@ -1036,6 +1040,14 @@ function refreshSignUI() {
 // Amount column sort: high→low, then low→high, then back to date order
 document.getElementById('th-amount').addEventListener('click', () => {
   sortMode = sortMode === 'amount-desc' ? 'amount-asc' : sortMode === 'amount-asc' ? 'date' : 'amount-desc';
+  settings.sortMode = sortMode;
+  saveJSON(LS_KEYS.settings, settings);
+  renderTable();
+});
+
+// Date column sort: old→new, then back to newest-first (default)
+document.getElementById('th-date').addEventListener('click', () => {
+  sortMode = sortMode === 'date-asc' ? 'date' : 'date-asc';
   settings.sortMode = sortMode;
   saveJSON(LS_KEYS.settings, settings);
   renderTable();
