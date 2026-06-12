@@ -130,6 +130,29 @@
     </div>
   </section>
 
+  <!-- Incidental budget tracker -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h2 class="font-semibold text-white">Incidental projects — spent vs MJP budget</h2>
+      <span id="inc-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-4">Live total of every transaction triaged as <span class="text-orange-400 font-semibold">[Incidental Project]</span>, grouped by sub-project, against the planned budget from your multi-year plan. Refunds reduce the spent amount.</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="inc-tracker"></div>
+    <div class="mt-5">
+      <div class="relative h-64"><canvas id="chart-incidental"></canvas></div>
+    </div>
+  </section>
+
+  <!-- Manage projects -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h2 class="font-semibold text-white">Manage projects &amp; budgets</h2>
+      <button id="btn-add-project" class="ml-auto text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg">+ Add project</button>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-3">Rename, re-budget, add or remove sub-project categories. These drive the triage dropdowns on every transaction and the tracker above — renaming a project also re-labels every transaction already mapped to it. Changes persist in localStorage.</p>
+    <div id="proj-list" class="space-y-2"></div>
+  </section>
+
   <!-- Transactions -->
   <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
     <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -332,8 +355,20 @@ const PLANNED_INCIDENTAL_TAIL = 2000; // "Onvoorzien" beyond the MJP horizon
 
 const PROJECTION_START_YEAR = 2026;
 
-// Sub-projects taken from the MJP "Incidentieel" block
-const PROJECTS = ['Badkamer', 'Auto', 'Warmtepomp', 'Dakkapel', 'Kantoor', 'Trapkast', 'Tuin', 'Keuken / Witgoed', 'Bedombouw', 'Onvoorzien / Overig'];
+// Sub-projects + their planned budgets, taken from the MJP "Incidentieel" block.
+// Fully editable at runtime (see "Manage projects & budgets" panel); persisted.
+const DEFAULT_PROJECTS = [
+  { name: 'Badkamer', budget: 12000 },           // Nieuwe badkamer 2027
+  { name: 'Auto', budget: 30000 },               // Nieuwe auto 2030
+  { name: 'Warmtepomp', budget: 11000 },         // Warmtepomp 2026
+  { name: 'Dakkapel', budget: 15000 },           // Dakkapel 2031
+  { name: 'Kantoor', budget: 1200 },             // Kantoor afmaken 2026
+  { name: 'Trapkast', budget: 750 },             // Trapkast bouwen 2026
+  { name: 'Tuin', budget: 5931 },                // Tuinverbouwing 4831 + 350 + 750
+  { name: 'Keuken / Witgoed', budget: 5150 },    // Oven 900 + Inductie 1300 + Magnetron 700 + Witgoed 2250
+  { name: 'Bedombouw', budget: 450 },            // Bedombouw 2026
+  { name: 'Onvoorzien / Overig', budget: 1500 }  // Onvoorzien 2026
+];
 
 // Household accounts: the checking account itself + joint savings account.
 // Transfers to the joint account ("Sparen", "Maandelijkse inleg") shift money
@@ -354,7 +389,7 @@ const DEFAULT_SETTINGS = {
   includePlanned: true
 };
 
-const LS_KEYS = { settings: 'fc.settings.v1', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1' };
+const LS_KEYS = { settings: 'fc.settings.v1', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v1' };
 
 /* ================================================================
    3. STATE + PERSISTENCE
@@ -362,6 +397,7 @@ const LS_KEYS = { settings: 'fc.settings.v1', tx: 'fc.transactions.v1', override
 let settings = loadJSON(LS_KEYS.settings) || { ...DEFAULT_SETTINGS };
 let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
+let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
 let activeFilter = 'all';
 
 function loadJSON(key) {
@@ -376,6 +412,7 @@ function persistAll() {
   saveJSON(LS_KEYS.settings, settings);
   saveJSON(LS_KEYS.tx, transactions);
   saveJSON(LS_KEYS.overrides, overrides);
+  saveJSON(LS_KEYS.projects, projects);
 }
 
 /* ================================================================
@@ -491,7 +528,7 @@ function aggregate() {
   const agg = {
     months: new Set(),
     recurringIncome: 0, recurringSpend: 0,
-    incidentalNetByYear: {}, incidentalTotal: 0, incidentalCount: 0,
+    incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
     excludedTotal: 0,
     spendByCat: {}, flowByMonth: {}
   };
@@ -514,6 +551,8 @@ function aggregate() {
     if (e.cls === 'incidental') {
       // negative amount = deduction; refunds (positive) reduce the dent
       agg.incidentalNetByYear[year] = (agg.incidentalNetByYear[year] || 0) - t.amount;
+      const proj = e.project || 'Onvoorzien / Overig';
+      agg.incidentalByProject[proj] = (agg.incidentalByProject[proj] || 0) - t.amount;
       agg.incidentalTotal -= t.amount;
       agg.incidentalCount++;
     } else { // recurring
@@ -617,6 +656,18 @@ const chartCashflow = new Chart(document.getElementById('chart-cashflow'), {
     scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(1) + 'k' } } } }
 });
 
+const chartIncidental = new Chart(document.getElementById('chart-incidental'), {
+  type: 'bar',
+  data: { labels: [], datasets: [
+    { label: 'Planned budget', data: [], backgroundColor: 'rgba(71,85,105,.6)', borderRadius: 4 },
+    { label: 'Actually spent', data: [], backgroundColor: 'rgba(249,115,22,.8)', borderRadius: 4 }
+  ]},
+  options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { boxWidth: 14 } },
+      tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR.format(c.parsed.x)}` } } },
+    scales: { x: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } } } }
+});
+
 /* ================================================================
    10. RENDERING
    ================================================================ */
@@ -672,6 +723,67 @@ function recomputeAll() {
   chartCashflow.data.datasets[1].data = months.map(m => agg.flowByMonth[m].out);
   chartCashflow.data.datasets[2].data = months.map(m => agg.flowByMonth[m].inc - agg.flowByMonth[m].out);
   chartCashflow.update();
+
+  renderIncidentalTracker(agg);
+}
+
+function renderIncidentalTracker(agg) {
+  // Union of configured projects and any project that has actual spend
+  const known = projects.map(p => p.name);
+  const extra = Object.keys(agg.incidentalByProject).filter(n => !known.includes(n));
+  const all = [...projects, ...extra.map(n => ({ name: n, budget: 0 }))];
+
+  let totBudget = 0, totSpent = 0;
+  const rows = all.map(p => {
+    const spent = agg.incidentalByProject[p.name] || 0;
+    const budget = p.budget || 0;
+    totBudget += budget; totSpent += spent;
+    const pct = budget > 0 ? (spent / budget * 100) : (spent > 0 ? 100 : 0);
+    const over = budget > 0 && spent > budget;
+    const barColor = over ? 'bg-rose-500' : pct > 80 ? 'bg-amber-500' : 'bg-cyan-500';
+    const pctLabel = budget > 0 ? pct.toFixed(0) + '%' : (spent > 0 ? 'no budget' : '—');
+    const remaining = budget - spent;
+    const remLabel = budget > 0
+      ? (remaining >= 0 ? fmtEUR0.format(remaining) + ' left' : fmtEUR0.format(-remaining) + ' over')
+      : '';
+    return `
+      <div>
+        <div class="flex justify-between items-baseline text-xs mb-1">
+          <span class="font-medium text-slate-200">${esc(p.name)}</span>
+          <span class="text-slate-400">${fmtEUR0.format(spent)} <span class="text-slate-600">/ ${fmtEUR0.format(budget)}</span>
+            <span class="${over ? 'text-rose-400' : 'text-slate-500'} ml-1">${pctLabel}</span></span>
+        </div>
+        <div class="h-2.5 rounded-full bg-slate-800 overflow-hidden">
+          <div class="h-full ${barColor} transition-all" style="width:${Math.min(100, pct).toFixed(1)}%"></div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-0.5 text-right">${remLabel}</div>
+      </div>`;
+  });
+  document.getElementById('inc-tracker').innerHTML = rows.join('');
+
+  const remaining = totBudget - totSpent;
+  document.getElementById('inc-summary').textContent =
+    `spent ${fmtEUR0.format(totSpent)} of ${fmtEUR0.format(totBudget)} planned · ` +
+    (remaining >= 0 ? fmtEUR0.format(remaining) + ' remaining' : fmtEUR0.format(-remaining) + ' OVER budget');
+
+  // Horizontal budget-vs-actual chart (only projects with budget or spend)
+  const shown = all.filter(p => (p.budget || 0) > 0 || (agg.incidentalByProject[p.name] || 0) !== 0);
+  chartIncidental.data.labels = shown.map(p => p.name);
+  chartIncidental.data.datasets[0].data = shown.map(p => p.budget || 0);
+  chartIncidental.data.datasets[1].data = shown.map(p => agg.incidentalByProject[p.name] || 0);
+  chartIncidental.update();
+}
+
+function renderProjects() {
+  document.getElementById('proj-list').innerHTML = projects.map((p, i) => `
+    <div class="flex items-center gap-2" data-idx="${i}">
+      <input class="proj-name flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-slate-100" value="${esc(p.name)}" placeholder="Project name">
+      <div class="relative">
+        <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">€</span>
+        <input type="number" step="50" min="0" class="proj-budget w-32 bg-slate-800 border border-slate-700 rounded-lg pl-5 pr-2 py-1.5 text-sm text-slate-100" value="${p.budget}" placeholder="Budget">
+      </div>
+      <button class="proj-del text-sm font-semibold bg-slate-800 hover:bg-rose-900 text-slate-400 hover:text-rose-200 px-3 py-1.5 rounded-lg border border-slate-700" title="Remove project">✕</button>
+    </div>`).join('');
 }
 
 function renderTable() {
@@ -684,7 +796,9 @@ function renderTable() {
     shown++;
     const label = t.name || t.desc.slice(0, 40);
     const amountCls = t.amount < 0 ? 'text-rose-300' : 'text-emerald-400';
-    const projectOptions = PROJECTS.map(p =>
+    const projNames = projects.map(p => p.name);
+    if (e.project && !projNames.includes(e.project)) projNames.unshift(e.project); // keep orphaned mapping visible
+    const projectOptions = projNames.map(p =>
       `<option value="${esc(p)}"${p === e.project ? ' selected' : ''}>${esc(p)}</option>`).join('');
     rows.push(`
       <tr class="border-b border-slate-800/60 hover:bg-slate-800/30" data-id="${esc(t.id)}">
@@ -752,6 +866,60 @@ document.querySelectorAll('.flt').forEach(btn => {
     document.querySelectorAll('.flt').forEach(b => b.classList.toggle('bg-slate-800', b === btn));
     renderTable();
   });
+});
+
+// Projects management (rename / re-budget / remove / add)
+document.getElementById('proj-list').addEventListener('change', (ev) => {
+  const row = ev.target.closest('[data-idx]');
+  if (!row) return;
+  const idx = parseInt(row.dataset.idx, 10);
+  if (!projects[idx]) return;
+
+  if (ev.target.classList.contains('proj-name')) {
+    const oldName = projects[idx].name;
+    const newName = ev.target.value.trim();
+    if (!newName || newName === oldName) { ev.target.value = oldName; return; }
+    if (projects.some((p, i) => i !== idx && p.name === newName)) {
+      alert('A project named "' + newName + '" already exists.');
+      ev.target.value = oldName; return;
+    }
+    projects[idx].name = newName;
+    // Re-label every transaction already mapped to the old project name
+    for (const id in overrides) if (overrides[id].project === oldName) overrides[id].project = newName;
+    saveJSON(LS_KEYS.overrides, overrides);
+    saveJSON(LS_KEYS.projects, projects);
+    recomputeAll();
+    renderTable();
+  } else if (ev.target.classList.contains('proj-budget')) {
+    const v = parseFloat(ev.target.value);
+    projects[idx].budget = isFinite(v) && v >= 0 ? v : 0;
+    ev.target.value = projects[idx].budget;
+    saveJSON(LS_KEYS.projects, projects);
+    recomputeAll();
+  }
+});
+document.getElementById('proj-list').addEventListener('click', (ev) => {
+  if (!ev.target.classList.contains('proj-del')) return;
+  const row = ev.target.closest('[data-idx]');
+  if (!row) return;
+  const idx = parseInt(row.dataset.idx, 10);
+  const p = projects[idx];
+  if (!p) return;
+  if (!confirm('Remove project "' + p.name + '"? Transactions already mapped to it keep the label until you re-triage them.')) return;
+  projects.splice(idx, 1);
+  saveJSON(LS_KEYS.projects, projects);
+  renderProjects();
+  recomputeAll();
+  renderTable();
+});
+document.getElementById('btn-add-project').addEventListener('click', () => {
+  let n = 1, name;
+  do { name = 'New project' + (n === 1 ? '' : ' ' + n); n++; } while (projects.some(p => p.name === name));
+  projects.push({ name, budget: 0 });
+  saveJSON(LS_KEYS.projects, projects);
+  renderProjects();
+  recomputeAll();
+  renderTable();
 });
 
 // Settings inputs
@@ -827,12 +995,15 @@ document.getElementById('btn-reset-all').addEventListener('click', () => {
   localStorage.removeItem(LS_KEYS.settings);
   localStorage.removeItem(LS_KEYS.tx);
   localStorage.removeItem(LS_KEYS.overrides);
+  localStorage.removeItem(LS_KEYS.projects);
   settings = { ...DEFAULT_SETTINGS };
   overrides = {};
+  projects = DEFAULT_PROJECTS.map(p => ({ ...p }));
   transactions = [];
   mergeTransactions(parseAsnCsv(SAMPLE_CSV));
   persistAll();
   bindSettingValues();
+  renderProjects();
   recomputeAll();
   renderTable();
 });
@@ -850,6 +1021,7 @@ function bindSettingValues() {
     saveJSON(LS_KEYS.tx, transactions);
   }
   bindSettings();
+  renderProjects();
   recomputeAll();
   renderTable();
 })();
