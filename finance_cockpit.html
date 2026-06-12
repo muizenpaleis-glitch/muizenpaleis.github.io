@@ -184,6 +184,11 @@
           </div>
         </div>
         <div class="flex gap-1">
+          <button data-sign="all" class="sgn px-3 py-1 rounded-lg border border-slate-700 bg-slate-800">±</button>
+          <button data-sign="in" class="sgn px-3 py-1 rounded-lg border border-slate-700 text-emerald-400" title="Income only (positive amounts)">Income</button>
+          <button data-sign="out" class="sgn px-3 py-1 rounded-lg border border-slate-700 text-rose-300" title="Spendings only (negative amounts)">Spendings</button>
+        </div>
+        <div class="flex gap-1">
           <button data-filter="all" class="flt px-3 py-1 rounded-lg border border-slate-700 bg-slate-800">All</button>
           <button data-filter="recurring" class="flt px-3 py-1 rounded-lg border border-slate-700">Recurring</button>
           <button data-filter="incidental" class="flt px-3 py-1 rounded-lg border border-slate-700">Incidental</button>
@@ -427,6 +432,7 @@ let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
 let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
 let activeFilter = 'all';
 let catFilter = settings.catFilter ? new Set(settings.catFilter) : null; // null = all categories shown
+let signFilter = settings.signFilter || 'all'; // 'all' | 'in' (positive) | 'out' (negative)
 let sortMode = settings.sortMode || 'date';    // 'date' | 'amount-desc' | 'amount-asc'
 let timeGran = settings.timeGran || 'all';     // 'all' | 'year' | 'quarter' | 'month'
 let timePeriod = settings.timePeriod || '';    // e.g. '2026', '2026-Q2', '2026-05'
@@ -925,6 +931,8 @@ function renderTable() {
     const e = effective(t);
     if (activeFilter !== 'all' && e.cls !== activeFilter) continue;
     if (catFilter && !catFilter.has(e.bankCat)) continue;
+    if (signFilter === 'in' && t.amount <= 0) continue;
+    if (signFilter === 'out' && t.amount >= 0) continue;
     shown++;
     const label = t.name || t.desc.slice(0, 40);
     const amountCls = t.amount < 0 ? 'text-rose-300' : 'text-emerald-400';
@@ -1010,6 +1018,20 @@ document.querySelectorAll('.flt').forEach(btn => {
     renderTable();
   });
 });
+
+// Income / spendings sign filter
+document.querySelectorAll('.sgn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    signFilter = btn.dataset.sign;
+    settings.signFilter = signFilter;
+    saveJSON(LS_KEYS.settings, settings);
+    refreshSignUI();
+    renderTable();
+  });
+});
+function refreshSignUI() {
+  document.querySelectorAll('.sgn').forEach(b => b.classList.toggle('bg-slate-800', b.dataset.sign === signFilter));
+}
 
 // Amount column sort: high→low, then low→high, then back to date order
 document.getElementById('th-amount').addEventListener('click', () => {
@@ -1206,6 +1228,8 @@ document.getElementById('btn-reset-all').addEventListener('click', () => {
   sortMode = 'date';
   catFilter = null;
   lastCatSig = ' ';
+  signFilter = 'all';
+  refreshSignUI();
   timeGran = 'all';
   timePeriod = '';
   mergeTransactions(parseAsnCsv(SAMPLE_CSV));
@@ -1230,6 +1254,7 @@ function bindSettingValues() {
   }
   bindSettings();
   renderProjects();
+  refreshSignUI();
   recomputeAll();
   renderTable();
 })();
