@@ -37,11 +37,25 @@
 
 <main class="max-w-7xl mx-auto px-4 py-6 space-y-6" id="drop-zone">
 
+  <!-- Time filter -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-3">
+    <span class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Time filter</span>
+    <div class="flex gap-1 text-xs" id="time-gran">
+      <button data-gran="all" class="tg px-3 py-1 rounded-lg border border-slate-700 bg-slate-800">All</button>
+      <button data-gran="year" class="tg px-3 py-1 rounded-lg border border-slate-700">Year</button>
+      <button data-gran="quarter" class="tg px-3 py-1 rounded-lg border border-slate-700">Quarter</button>
+      <button data-gran="month" class="tg px-3 py-1 rounded-lg border border-slate-700">Month</button>
+    </div>
+    <select id="time-period" class="bg-slate-800 border border-slate-700 rounded-lg text-xs px-2 py-1.5 text-slate-200 disabled:opacity-40"></select>
+    <span class="text-[11px] text-slate-500 ml-auto">Filters income, spend, the category &amp; cashflow charts and the transaction list. The projection and incidental tracker always use all data.</span>
+  </section>
+
   <!-- KPI cards -->
   <section class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div class="text-[11px] uppercase tracking-wider text-slate-500">Recurring income / mo</div>
       <div id="kpi-income" class="text-lg font-bold text-emerald-400 mt-1">—</div>
+      <div id="kpi-income-sub" class="text-[11px] text-slate-500 mt-0.5"></div>
     </div>
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div class="text-[11px] uppercase tracking-wider text-slate-500">Recurring spend / mo</div>
@@ -165,6 +179,7 @@
         <button data-filter="exclude" class="flt px-3 py-1 rounded-lg border border-slate-700">Excluded</button>
       </div>
     </div>
+    <datalist id="bankcat-list"></datalist>
     <div class="overflow-x-auto max-h-[34rem] overflow-y-auto rounded-lg border border-slate-800">
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-slate-900 z-10">
@@ -399,6 +414,8 @@ let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
 let projects = loadJSON(LS_KEYS.projects) || DEFAULT_PROJECTS.map(p => ({ ...p }));
 let activeFilter = 'all';
+let timeGran = settings.timeGran || 'all';     // 'all' | 'year' | 'quarter' | 'month'
+let timePeriod = settings.timePeriod || '';    // e.g. '2026', '2026-Q2', '2026-05'
 
 function loadJSON(key) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; }
@@ -498,14 +515,22 @@ function guessProject(text) {
   return 'Onvoorzien / Overig';
 }
 
+// Bank category honouring a manual override (read directly, never via effective(),
+// so autoClassify can use it without recursion)
+function effBankCat(t) {
+  const o = overrides[t.id];
+  return o && o.bankCat ? o.bankCat : t.bankCat;
+}
+
 function autoClassify(t) {
+  const bankCat = effBankCat(t);
   // Internal transfers between own household accounts → exclude
   if (t.iban && OWN_ACCOUNTS.includes(t.iban)) return { cls: 'exclude', project: '' };
-  if (t.bankCat === 'Sparen') return { cls: 'exclude', project: '' };
+  if (bankCat === 'Sparen') return { cls: 'exclude', project: '' };
 
   const text = t.name + ' ' + t.desc;
   const big = Math.abs(t.amount) > settings.threshold;
-  if (big && (HW_TERMS.test(text) || HW_BANK_CATS.includes(t.bankCat))) {
+  if (big && (HW_TERMS.test(text) || HW_BANK_CATS.includes(bankCat))) {
     return { cls: 'incidental', project: guessProject(text) };
   }
   return { cls: 'recurring', project: '' };
@@ -517,6 +542,7 @@ function effective(t) {
   return {
     cls: ovr && ovr.cls ? ovr.cls : auto.cls,
     project: ovr && ovr.project !== undefined && ovr.project !== '' ? ovr.project : auto.project,
+    bankCat: ovr && ovr.bankCat ? ovr.bankCat : t.bankCat,
     isOverride: !!ovr
   };
 }
@@ -524,7 +550,8 @@ function effective(t) {
 /* ================================================================
    6. AGGREGATION
    ================================================================ */
-function aggregate() {
+function aggregate(txList) {
+  const list = txList || transactions;
   const agg = {
     months: new Set(),
     recurringIncome: 0, recurringSpend: 0,
@@ -532,7 +559,7 @@ function aggregate() {
     excludedTotal: 0,
     spendByCat: {}, flowByMonth: {}
   };
-  for (const t of transactions) {
+  for (const t of list) {
     const e = effective(t);
     const month = t.date.slice(0, 7);
     const year = parseInt(t.date.slice(0, 4), 10);
@@ -546,7 +573,7 @@ function aggregate() {
     if (t.amount > 0) agg.flowByMonth[month].inc += t.amount;
     else agg.flowByMonth[month].out += -t.amount;
 
-    if (t.amount < 0) agg.spendByCat[t.bankCat] = (agg.spendByCat[t.bankCat] || 0) - t.amount;
+    if (t.amount < 0) agg.spendByCat[e.bankCat] = (agg.spendByCat[e.bankCat] || 0) - t.amount;
 
     if (e.cls === 'incidental') {
       // negative amount = deduction; refunds (positive) reduce the dent
@@ -567,6 +594,49 @@ function aggregate() {
   agg.deviationMonthly = settings.monthlyBudget - agg.spendPerMonth;
   agg.deltaSavingsAnnual = agg.deviationMonthly * 12;
   return agg;
+}
+
+/* ================================================================
+   6b. TIME FILTER (month / quarter / year)
+   ================================================================ */
+function quarterOf(dateStr) {
+  return dateStr.slice(0, 4) + '-Q' + (Math.floor((parseInt(dateStr.slice(5, 7), 10) - 1) / 3) + 1);
+}
+function inPeriod(dateStr) {
+  if (timeGran === 'all') return true;
+  if (timeGran === 'year') return dateStr.slice(0, 4) === timePeriod;
+  if (timeGran === 'month') return dateStr.slice(0, 7) === timePeriod;
+  if (timeGran === 'quarter') return quarterOf(dateStr) === timePeriod;
+  return true;
+}
+function getFilteredTransactions() {
+  return timeGran === 'all' ? transactions : transactions.filter(t => inPeriod(t.date));
+}
+function periodsFor(gran) {
+  const set = new Set();
+  for (const t of transactions) {
+    if (gran === 'year') set.add(t.date.slice(0, 4));
+    else if (gran === 'month') set.add(t.date.slice(0, 7));
+    else if (gran === 'quarter') set.add(quarterOf(t.date));
+  }
+  return [...set].sort();
+}
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function labelPeriod(p) {
+  if (timeGran === 'month') { const [y, m] = p.split('-'); return MONTH_NAMES[parseInt(m, 10) - 1] + ' ' + y; }
+  return p;
+}
+function refreshTimeUI() {
+  document.querySelectorAll('.tg').forEach(b => b.classList.toggle('bg-slate-800', b.dataset.gran === timeGran));
+  const sel = document.getElementById('time-period');
+  if (timeGran === 'all') { sel.innerHTML = ''; sel.disabled = true; return; }
+  sel.disabled = false;
+  const periods = periodsFor(timeGran);
+  if (!periods.includes(timePeriod)) timePeriod = periods[periods.length - 1] || '';
+  sel.innerHTML = periods.map(p => `<option value="${p}"${p === timePeriod ? ' selected' : ''}>${esc(labelPeriod(p))}</option>`).join('');
+}
+function activePeriodLabel() {
+  return timeGran === 'all' ? 'all data' : labelPeriod(timePeriod);
 }
 
 /* ================================================================
@@ -672,29 +742,34 @@ const chartIncidental = new Chart(document.getElementById('chart-incidental'), {
    10. RENDERING
    ================================================================ */
 function recomputeAll() {
-  const agg = aggregate();
+  refreshTimeUI();
+  const aggFull = aggregate(transactions);                 // drives projection, deviation, incidentals
+  const aggView = aggregate(getFilteredTransactions());    // drives the time-filtered spend/earn views
+  const periodTxt = activePeriodLabel();
 
-  // KPIs
-  document.getElementById('kpi-income').textContent = fmtEUR.format(agg.incomePerMonth);
-  document.getElementById('kpi-spend').textContent = fmtEUR.format(agg.spendPerMonth);
-  document.getElementById('kpi-spend-sub').textContent = 'budget ' + fmtEUR.format(settings.monthlyBudget);
+  // KPIs — income & spend respect the time filter
+  document.getElementById('kpi-income').textContent = fmtEUR.format(aggView.incomePerMonth);
+  document.getElementById('kpi-income-sub').textContent = periodTxt + ' · per month';
+  document.getElementById('kpi-spend').textContent = fmtEUR.format(aggView.spendPerMonth);
+  document.getElementById('kpi-spend-sub').textContent = periodTxt + ' · budget ' + fmtEUR.format(settings.monthlyBudget);
 
+  // Deviation drives the projection → always computed over all data
   const deltaEl = document.getElementById('kpi-delta');
-  deltaEl.textContent = (agg.deltaSavingsAnnual >= 0 ? '+' : '') + fmtEUR0.format(agg.deltaSavingsAnnual);
-  deltaEl.className = 'text-lg font-bold mt-1 ' + (agg.deltaSavingsAnnual >= 0 ? 'text-emerald-400' : 'text-rose-400');
+  deltaEl.textContent = (aggFull.deltaSavingsAnnual >= 0 ? '+' : '') + fmtEUR0.format(aggFull.deltaSavingsAnnual);
+  deltaEl.className = 'text-lg font-bold mt-1 ' + (aggFull.deltaSavingsAnnual >= 0 ? 'text-emerald-400' : 'text-rose-400');
 
-  document.getElementById('kpi-incidental').textContent = fmtEUR.format(agg.incidentalTotal);
-  document.getElementById('kpi-incidental-sub').textContent = agg.incidentalCount + ' transaction(s) flagged';
-  document.getElementById('kpi-excluded').textContent = fmtEUR.format(agg.excludedTotal);
+  document.getElementById('kpi-incidental').textContent = fmtEUR.format(aggFull.incidentalTotal);
+  document.getElementById('kpi-incidental-sub').textContent = aggFull.incidentalCount + ' transaction(s) flagged';
+  document.getElementById('kpi-excluded').textContent = fmtEUR.format(aggFull.excludedTotal);
 
   document.getElementById('hdr-months').textContent =
-    transactions.length + ' transactions · ' + agg.monthCount + ' month(s) loaded: ' + [...agg.months].sort().join(', ');
+    transactions.length + ' transactions · ' + aggFull.monthCount + ' month(s): ' + [...aggFull.months].sort().join(', ');
 
-  // Projection chart
+  // Projection chart (all data)
   const labels = [];
   for (let i = 0; i <= settings.horizon; i++) labels.push(String(PROJECTION_START_YEAR + i));
-  const plan = projectNetWorth(agg, false);
-  const actual = projectNetWorth(agg, true);
+  const plan = projectNetWorth(aggFull, false);
+  const actual = projectNetWorth(aggFull, true);
   chartProjection.data.labels = labels;
   chartProjection.data.datasets[0].data = plan;
   chartProjection.data.datasets[1].data = actual;
@@ -707,8 +782,8 @@ function recomputeAll() {
   document.getElementById('kpi-horizon-sub').textContent =
     (diff >= 0 ? '+' : '') + fmtEUR0.format(diff) + ' vs plan in ' + (PROJECTION_START_YEAR + settings.horizon);
 
-  // Category doughnut (top 9 + rest)
-  const cats = Object.entries(agg.spendByCat).sort((a, b) => b[1] - a[1]);
+  // Category doughnut (filtered, top 9 + rest)
+  const cats = Object.entries(aggView.spendByCat).sort((a, b) => b[1] - a[1]);
   const top = cats.slice(0, 9);
   const rest = cats.slice(9).reduce((s, c) => s + c[1], 0);
   if (rest > 0) top.push(['Rest', rest]);
@@ -716,15 +791,15 @@ function recomputeAll() {
   chartCategories.data.datasets[0].data = top.map(c => Math.round(c[1] * 100) / 100);
   chartCategories.update();
 
-  // Cashflow bars
-  const months = Object.keys(agg.flowByMonth).sort();
+  // Cashflow bars (filtered)
+  const months = Object.keys(aggView.flowByMonth).sort();
   chartCashflow.data.labels = months;
-  chartCashflow.data.datasets[0].data = months.map(m => agg.flowByMonth[m].inc);
-  chartCashflow.data.datasets[1].data = months.map(m => agg.flowByMonth[m].out);
-  chartCashflow.data.datasets[2].data = months.map(m => agg.flowByMonth[m].inc - agg.flowByMonth[m].out);
+  chartCashflow.data.datasets[0].data = months.map(m => aggView.flowByMonth[m].inc);
+  chartCashflow.data.datasets[1].data = months.map(m => aggView.flowByMonth[m].out);
+  chartCashflow.data.datasets[2].data = months.map(m => aggView.flowByMonth[m].inc - aggView.flowByMonth[m].out);
   chartCashflow.update();
 
-  renderIncidentalTracker(agg);
+  renderIncidentalTracker(aggFull);
 }
 
 function renderIncidentalTracker(agg) {
@@ -788,9 +863,15 @@ function renderProjects() {
 
 function renderTable() {
   const tbody = document.getElementById('tx-body');
+
+  // Datalist of every bank category seen (for the editable category cells)
+  const allCats = [...new Set(transactions.map(t => effective(t).bankCat))].sort();
+  document.getElementById('bankcat-list').innerHTML = allCats.map(c => `<option value="${esc(c)}">`).join('');
+
+  const view = getFilteredTransactions();
   const rows = [];
   let shown = 0;
-  for (const t of transactions) {
+  for (const t of view) {
     const e = effective(t);
     if (activeFilter !== 'all' && e.cls !== activeFilter) continue;
     shown++;
@@ -807,7 +888,10 @@ function renderTable() {
           <div class="truncate font-medium text-slate-200" title="${esc(t.desc)}">${esc(label)}</div>
           <div class="truncate text-[11px] text-slate-500" title="${esc(t.desc)}">${esc(t.desc.slice(0, 70))}</div>
         </td>
-        <td class="px-3 py-2 whitespace-nowrap text-[11px] text-slate-400">${esc(t.bankCat)}</td>
+        <td class="px-3 py-2 whitespace-nowrap">
+          <input class="bankcat-input bg-slate-800 border border-slate-700 rounded-md text-[11px] px-1.5 py-1 text-slate-300 w-36"
+                 list="bankcat-list" value="${esc(e.bankCat)}" title="Edit bank category">
+        </td>
         <td class="px-3 py-2 text-right whitespace-nowrap font-mono font-semibold ${amountCls}">${fmtEUR.format(t.amount)}</td>
         <td class="px-3 py-2 whitespace-nowrap">
           <div class="flex gap-1">
@@ -828,7 +912,8 @@ function renderTable() {
       </tr>`);
   }
   tbody.innerHTML = rows.join('');
-  document.getElementById('tx-count').textContent = shown + ' of ' + transactions.length + ' shown';
+  document.getElementById('tx-count').textContent =
+    shown + ' shown · ' + view.length + ' in ' + activePeriodLabel() + ' · ' + transactions.length + ' total';
 }
 
 /* ================================================================
@@ -841,6 +926,7 @@ document.getElementById('tx-body').addEventListener('change', (ev) => {
   const tx = transactions.find(t => t.id === id);
   if (!tx) return;
   const current = overrides[id] || {};
+  let forceTableRender = false;
 
   if (ev.target.type === 'radio') {
     current.cls = ev.target.value;
@@ -854,10 +940,16 @@ document.getElementById('tx-body').addEventListener('change', (ev) => {
     current.project = ev.target.value;
     current.cls = current.cls || effective(tx).cls;
     overrides[id] = current;
+  } else if (ev.target.classList.contains('bankcat-input')) {
+    const v = ev.target.value.trim();
+    if (v) current.bankCat = v; else delete current.bankCat;   // empty reverts to the original
+    overrides[id] = current;
+    forceTableRender = true; // re-categorising can change auto-triage + the datalist
   }
+  if (!Object.keys(current).length) delete overrides[id];
   saveJSON(LS_KEYS.overrides, overrides);
   recomputeAll();
-  if (activeFilter !== 'all') renderTable();
+  if (forceTableRender || activeFilter !== 'all') renderTable();
 });
 
 document.querySelectorAll('.flt').forEach(btn => {
@@ -866,6 +958,27 @@ document.querySelectorAll('.flt').forEach(btn => {
     document.querySelectorAll('.flt').forEach(b => b.classList.toggle('bg-slate-800', b === btn));
     renderTable();
   });
+});
+
+// Time filter (month / quarter / year)
+document.getElementById('time-gran').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.tg');
+  if (!b) return;
+  timeGran = b.dataset.gran;
+  refreshTimeUI(); // rebuilds the period dropdown and picks a valid default
+  timePeriod = document.getElementById('time-period').value || timePeriod;
+  settings.timeGran = timeGran;
+  settings.timePeriod = timePeriod;
+  saveJSON(LS_KEYS.settings, settings);
+  recomputeAll();
+  renderTable();
+});
+document.getElementById('time-period').addEventListener('change', (ev) => {
+  timePeriod = ev.target.value;
+  settings.timePeriod = timePeriod;
+  saveJSON(LS_KEYS.settings, settings);
+  recomputeAll();
+  renderTable();
 });
 
 // Projects management (rename / re-budget / remove / add)
@@ -1000,6 +1113,8 @@ document.getElementById('btn-reset-all').addEventListener('click', () => {
   overrides = {};
   projects = DEFAULT_PROJECTS.map(p => ({ ...p }));
   transactions = [];
+  timeGran = 'all';
+  timePeriod = '';
   mergeTransactions(parseAsnCsv(SAMPLE_CSV));
   persistAll();
   bindSettingValues();
