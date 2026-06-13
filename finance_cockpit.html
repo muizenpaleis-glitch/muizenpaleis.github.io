@@ -84,6 +84,38 @@
     </div>
   </section>
 
+  <!-- Net worth — complete picture -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <h2 class="font-semibold text-white">Net worth — complete picture</h2>
+      <span class="text-[11px] text-slate-500 ml-auto">household buffer is derived from imports · update the others when they change</span>
+    </div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Household buffer</div>
+        <div id="nw-buffer" class="text-lg font-bold text-cyan-300 mt-1">—</div>
+        <div class="text-[11px] text-slate-500 mt-0.5">derived from imports</div>
+      </div>
+      <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Personal savings</div>
+        <div class="relative mt-1"><span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">€</span>
+          <input id="nw-personal" type="number" step="50" min="0" class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-5 pr-2 py-1.5 text-base font-bold text-slate-100"></div>
+        <div class="text-[11px] text-slate-500 mt-0.5">manual · separate accounts</div>
+      </div>
+      <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-500">Investments (value)</div>
+        <div class="relative mt-1"><span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">€</span>
+          <input id="nw-investments" type="number" step="50" min="0" class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-5 pr-2 py-1.5 text-base font-bold text-violet-200"></div>
+        <div id="nw-inv-note" class="text-[11px] text-slate-500 mt-0.5">manual · market value</div>
+      </div>
+      <div class="bg-slate-800/40 border border-cyan-800/60 rounded-lg p-3">
+        <div class="text-[11px] uppercase tracking-wider text-slate-400">Total net worth</div>
+        <div id="nw-total" class="text-lg font-bold text-white mt-1">—</div>
+        <div id="nw-total-sub" class="text-[11px] text-slate-500 mt-0.5"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- Projection + settings -->
   <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -620,7 +652,9 @@ const DEFAULT_SETTINGS = {
   projView: 'multi',                          // projection chart view: 'multi' | 'ytd'
   incYear: 'all',                             // incidental tracker year filter: 'all' | a year
   yrYear: 'all',                              // yearly tracker year filter: 'all' | a year
-  incExpanded: false, yrExpanded: false, savExpanded: false // collapsible tracker detail state
+  incExpanded: false, yrExpanded: false, savExpanded: false, // collapsible tracker detail state
+  personalSavings: 0,                         // manual: personal savings outside the household account
+  investmentValue: 0                          // manual: current market value of household investments
 };
 
 const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2', yearly: 'fc.yearly.v1' };
@@ -1232,6 +1266,29 @@ function recomputeAll() {
   renderYearlyTracker(aggFull);
   renderSavings(aggFull);
   renderBudgetFramework(aggFull, plan);
+  renderNetWorth(aggFull);
+}
+
+// Complete net worth = household buffer (derived from imports) + personal savings
+// + investments at market value (both entered by hand). The buffer already
+// excludes injected cash, so the three pots are additive — no double-counting.
+function renderNetWorth(agg) {
+  const netChange = agg.recurringIncome - agg.recurringSpend - agg.yearlyTotal - agg.incidentalTotal;
+  const buffer = settings.startNetWorth + netChange - agg.invest.total; // liquid, injected cash sits in the broker pot
+  const personal = settings.personalSavings || 0;
+  const invVal = settings.investmentValue || 0;
+  const total = buffer + personal + invVal;
+
+  document.getElementById('nw-buffer').textContent = fmtEUR0.format(buffer);
+  const pIn = document.getElementById('nw-personal'), iIn = document.getElementById('nw-investments');
+  if (document.activeElement !== pIn) pIn.value = personal;
+  if (document.activeElement !== iIn) iIn.value = invVal;
+  document.getElementById('nw-inv-note').innerHTML = agg.invest.total
+    ? `manual · ${signedEUR(invVal - agg.invest.total)} vs ${fmtEUR0.format(agg.invest.total)} injected (loaded)`
+    : 'manual · market value';
+  document.getElementById('nw-total').textContent = fmtEUR0.format(total);
+  document.getElementById('nw-total-sub').textContent =
+    `${fmtEUR0.format(buffer)} buffer + ${fmtEUR0.format(personal)} personal + ${fmtEUR0.format(invVal)} invested`;
 }
 
 // The layered budget roll-up for the base year, plus how the loaded actuals
@@ -2085,6 +2142,16 @@ document.getElementById('inc-year-filter').addEventListener('click', (ev) => {
   settings.incYear = b.dataset.year;
   saveJSON(LS_KEYS.settings, settings);
   recomputeAll();
+});
+
+// Net worth — manual pots (personal savings, investment value)
+[['nw-personal', 'personalSavings'], ['nw-investments', 'investmentValue']].forEach(([elId, key]) => {
+  document.getElementById(elId).addEventListener('change', (ev) => {
+    const v = parseFloat(ev.target.value);
+    settings[key] = isFinite(v) && v >= 0 ? v : 0;
+    saveJSON(LS_KEYS.settings, settings);
+    recomputeAll();
+  });
 });
 
 // Collapsible tracker sections (minimalist by default)
