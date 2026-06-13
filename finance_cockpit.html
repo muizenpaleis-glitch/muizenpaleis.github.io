@@ -162,56 +162,60 @@
   <!-- Secondary charts -->
   <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <h2 class="font-semibold text-white mb-2">Spend by bank category <span class="text-[11px] font-normal text-slate-500">(transfers excluded)</span></h2>
+      <h2 class="font-semibold text-white mb-2">Spend by bank category <span class="text-[11px] font-normal text-slate-500">(monthly recurring only)</span></h2>
       <div class="relative h-72"><canvas id="chart-categories"></canvas></div>
     </div>
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <h2 class="font-semibold text-white mb-2">Monthly cashflow <span class="text-[11px] font-normal text-slate-500">(transfers excluded)</span></h2>
+      <h2 class="font-semibold text-white mb-2">Monthly cashflow <span class="text-[11px] font-normal text-slate-500">(monthly recurring only)</span></h2>
       <div class="relative h-72"><canvas id="chart-cashflow"></canvas></div>
     </div>
   </section>
 
   <!-- Incidental budget tracker -->
   <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-    <div class="flex flex-wrap items-center gap-2 mb-1">
-      <h2 class="font-semibold text-white">Incidental projects — spent vs MJP budget</h2>
-      <div id="inc-year-filter" class="flex flex-wrap gap-1 text-xs"></div>
-      <span id="inc-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <h2 class="font-semibold text-white">Incidental projects</h2>
+      <button class="disc-btn ml-auto text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700" data-target="inc-details" data-key="incExpanded">Show projects <span class="caret">▾</span></button>
     </div>
-    <p class="text-[11px] text-slate-500 mb-4">Live total of every transaction triaged as <span class="text-orange-400 font-semibold">[Incidental Project]</span>, grouped by sub-project, against the planned budget from your multi-year plan. Refunds reduce the spent amount.</p>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="inc-tracker"></div>
+    <div id="inc-headline"></div>
+    <div id="inc-details" class="hidden mt-4 pt-3 border-t border-slate-800">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <div id="inc-year-filter" class="flex flex-wrap gap-1 text-xs"></div>
+        <span id="inc-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+      </div>
+      <p class="text-[11px] text-slate-500 mb-4">Every transaction triaged as <span class="text-orange-400 font-semibold">[Incidental Project]</span>, grouped by sub-project, against the planned budget. Refunds reduce the spent amount.</p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="inc-tracker"></div>
+    </div>
   </section>
 
   <!-- Yearly recurring tracker -->
   <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-    <div class="flex flex-wrap items-center gap-2 mb-1">
-      <h2 class="font-semibold text-white">Yearly recurring — spent vs budget</h2>
-      <div id="yr-year-filter" class="flex flex-wrap gap-1 text-xs"></div>
-      <button id="btn-edit-yearly" class="text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700">Edit budgets</button>
-      <span id="yr-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <h2 class="font-semibold text-white">Yearly recurring</h2>
+      <button class="disc-btn ml-auto text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700" data-target="yr-details" data-key="yrExpanded">Show items <span class="caret">▾</span></button>
     </div>
-    <p class="text-[11px] text-slate-500 mb-4">Expenses that recur every year but not monthly (<span class="text-violet-300 font-semibold">[Yearly]</span> in the triage) — vacations, insurance, annual taxes. Held <b>out of the monthly budget</b> so they don't distort it; the bar shows actual spend against the annual budget, and the projection compares them pro-rata. Only the <i>Vakantie</i> category auto-tags; tag the rest in the transaction list.</p>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="yr-tracker"></div>
-    <div id="yr-editor" class="hidden mt-4 pt-4 border-t border-slate-800 space-y-2"></div>
+    <div id="yr-headline"></div>
+    <div id="yr-details" class="hidden mt-4 pt-3 border-t border-slate-800">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <div id="yr-year-filter" class="flex flex-wrap gap-1 text-xs"></div>
+        <button id="btn-edit-yearly" class="text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700">Edit budgets</button>
+        <span id="yr-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+      </div>
+      <p class="text-[11px] text-slate-500 mb-4">Expenses that recur every year but not monthly (<span class="text-violet-300 font-semibold">[Yearly]</span> in the triage) — vacations, insurance, annual taxes. Held <b>out of the monthly budget</b>; the projection compares them pro-rata. Only the <i>Vakantie</i> category auto-tags; tag the rest in the transaction list.</p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="yr-tracker"></div>
+      <div id="yr-editor" class="hidden mt-4 pt-4 border-t border-slate-800 space-y-2"></div>
+    </div>
   </section>
 
   <!-- Savings & investments -->
   <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-    <div class="flex flex-wrap items-center gap-2 mb-1">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
       <h2 class="font-semibold text-white">Savings &amp; investments</h2>
-      <span id="sav-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+      <span id="sav-summary" class="text-[11px] text-slate-500"></span>
+      <button class="disc-btn ml-auto text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700" data-target="sav-details" data-key="savExpanded">Show details <span class="caret">▾</span></button>
     </div>
-    <p class="text-[11px] text-slate-500 mb-4">
-      Transfers to/from your savings account(s) netted into a savings balance. Large one-off movements
-      (≥ the threshold in <a href="#settings-panel" class="sp-link text-cyan-400 hover:underline">⚙ settings</a>) are flagged
-      <span class="text-amber-400 font-semibold">incidental</span> and excluded from the
-      <b>regular</b> net, which captures the monthly saving rhythm — including the small bookings back to current that quietly eat into it.
-      Use the toggle on any row to reclassify. Investments are one-way yearly injections: broker accounts are
-      auto-detected from the counterparty (DEGIRO, Meesman, Brand New Day, ASN Doelbeleggen, …) and can be added by IBAN in
-      <a href="#settings-panel" class="sp-link text-cyan-400 hover:underline">⚙ settings</a>.
-    </p>
 
-    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-4">
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
       <div class="bg-slate-800/40 border border-slate-800 rounded-lg p-3">
         <div class="text-[11px] uppercase tracking-wider text-slate-500">Regular net / mo</div>
         <div id="sav-netreg-mo" class="text-lg font-bold mt-1">—</div>
@@ -239,26 +243,35 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <div>
-        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Monthly savings rhythm</h3>
-        <div class="overflow-x-auto">
-          <table class="w-full text-xs">
-            <thead class="text-slate-500 border-b border-slate-800">
-              <tr><th class="text-left py-1.5">Month</th><th class="text-right">In</th><th class="text-right">Out</th>
-                  <th class="text-right">Net</th><th class="text-right text-slate-400">Regular net</th></tr>
-            </thead>
-            <tbody id="sav-month-body"></tbody>
-          </table>
+    <div id="sav-details" class="hidden mt-4 pt-3 border-t border-slate-800">
+      <p class="text-[11px] text-slate-500 mb-4">
+        Transfers to/from your savings account(s) netted into a balance. Large one-off movements
+        (≥ the threshold in <a href="#settings-panel" class="sp-link text-cyan-400 hover:underline">⚙ settings</a>) are flagged
+        <span class="text-amber-400 font-semibold">incidental</span> and excluded from the <b>regular</b> net.
+        Use the toggle on any row to reclassify. Broker accounts auto-detect from the counterparty, or add an IBAN in
+        <a href="#settings-panel" class="sp-link text-cyan-400 hover:underline">⚙ settings</a>.
+      </p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div>
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Monthly savings rhythm</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead class="text-slate-500 border-b border-slate-800">
+                <tr><th class="text-left py-1.5">Month</th><th class="text-right">In</th><th class="text-right">Out</th>
+                    <th class="text-right">Net</th><th class="text-right text-slate-400">Regular net</th></tr>
+              </thead>
+              <tbody id="sav-month-body"></tbody>
+            </table>
+          </div>
         </div>
-      </div>
-      <div>
-        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Bookings <span class="font-normal normal-case text-slate-600">— toggle incidental</span></h3>
-        <div id="sav-items" class="space-y-1 max-h-72 overflow-y-auto pr-1"></div>
-        <h3 id="inv-head" class="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2 hidden">Investment bookings <span class="font-normal normal-case text-slate-600">— toggle off wrongly-detected ones</span></h3>
-        <div id="inv-items" class="space-y-1 max-h-56 overflow-y-auto pr-1"></div>
-        <div id="inv-years" class="space-y-1 mt-2"></div>
-        <div id="inv-detected" class="text-[10px] text-slate-600 mt-2"></div>
+        <div>
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Bookings <span class="font-normal normal-case text-slate-600">— toggle incidental</span></h3>
+          <div id="sav-items" class="space-y-1 max-h-72 overflow-y-auto pr-1"></div>
+          <h3 id="inv-head" class="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-4 mb-2 hidden">Investment bookings <span class="font-normal normal-case text-slate-600">— toggle off wrongly-detected ones</span></h3>
+          <div id="inv-items" class="space-y-1 max-h-56 overflow-y-auto pr-1"></div>
+          <div id="inv-years" class="space-y-1 mt-2"></div>
+          <div id="inv-detected" class="text-[10px] text-slate-600 mt-2"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -606,7 +619,8 @@ const DEFAULT_SETTINGS = {
   savingsIncidentalThreshold: 1500,           // |€| at/above which a savings movement auto-counts as incidental
   projView: 'multi',                          // projection chart view: 'multi' | 'ytd'
   incYear: 'all',                             // incidental tracker year filter: 'all' | a year
-  yrYear: 'all'                               // yearly tracker year filter: 'all' | a year
+  yrYear: 'all',                              // yearly tracker year filter: 'all' | a year
+  incExpanded: false, yrExpanded: false, savExpanded: false // collapsible tracker detail state
 };
 
 const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2', yearly: 'fc.yearly.v1' };
@@ -1197,8 +1211,8 @@ function recomputeAll() {
   document.getElementById('kpi-horizon-sub').textContent =
     (diff >= 0 ? '+' : '') + fmtEUR0.format(diff) + ' vs plan in ' + (PROJECTION_START_YEAR + settings.horizon);
 
-  // Category doughnut (filtered, top 9 + rest)
-  const cats = Object.entries(aggView.spendByCat).sort((a, b) => b[1] - a[1]);
+  // Category doughnut (filtered, monthly-recurring spend only, top 9 + rest)
+  const cats = Object.entries(aggView.recurringSpendByCat).sort((a, b) => b[1] - a[1]);
   const top = cats.slice(0, 9);
   const rest = cats.slice(9).reduce((s, c) => s + c[1], 0);
   if (rest > 0) top.push(['Rest', rest]);
@@ -1206,12 +1220,12 @@ function recomputeAll() {
   chartCategories.data.datasets[0].data = top.map(c => Math.round(c[1] * 100) / 100);
   chartCategories.update();
 
-  // Cashflow bars (filtered)
-  const months = Object.keys(aggView.flowByMonth).sort();
+  // Cashflow bars (filtered, monthly-recurring income & spend only)
+  const months = [...new Set([...Object.keys(aggView.recurringIncomeByMonth), ...Object.keys(aggView.recurringSpendByMonth)])].sort();
   chartCashflow.data.labels = months;
-  chartCashflow.data.datasets[0].data = months.map(m => aggView.flowByMonth[m].inc);
-  chartCashflow.data.datasets[1].data = months.map(m => aggView.flowByMonth[m].out);
-  chartCashflow.data.datasets[2].data = months.map(m => aggView.flowByMonth[m].inc - aggView.flowByMonth[m].out);
+  chartCashflow.data.datasets[0].data = months.map(m => aggView.recurringIncomeByMonth[m] || 0);
+  chartCashflow.data.datasets[1].data = months.map(m => aggView.recurringSpendByMonth[m] || 0);
+  chartCashflow.data.datasets[2].data = months.map(m => (aggView.recurringIncomeByMonth[m] || 0) - (aggView.recurringSpendByMonth[m] || 0));
   chartCashflow.update();
 
   renderIncidentalTracker(aggFull);
@@ -1232,10 +1246,11 @@ function renderBudgetFramework(agg, plan) {
   const incidentals = plannedIncidentalForYear(year);
   const invest = investmentForYear(year);
   const start = settings.startNetWorth;
-  const netResult = gross - oneoffs - incidentals;          // change in net worth (excl. investments)
-  const endComponents = start + netResult - invest;          // buffer at year-end from the components
+  const netResult = gross - oneoffs - incidentals;          // change in net worth (transfers are internal)
+  const netWorthEnd = start + netResult;                     // total net worth at year-end (incl. invested)
+  const bufferEnd = netWorthEnd - invest;                    // liquid buffer (excl. invested) = sheet "Netto Resultaat"
   const endPlan = plan[1];                                   // buffer at year-end from the sheet's op result
-  const recoGap = endPlan - endComponents;
+  const recoGap = endPlan - bufferEnd;
 
   const line = (label, val, opts = {}) => {
     const c = opts.muted ? 'text-slate-400' : (val < 0 ? 'text-rose-300' : 'text-emerald-300');
@@ -1243,43 +1258,53 @@ function renderBudgetFramework(agg, plan) {
       <span class="${opts.bold ? 'text-slate-200 font-medium' : 'text-slate-400'}">${label}</span>
       <span class="font-mono ${opts.plain ? 'text-slate-300' : c}">${opts.plain ? fmtEUR0.format(val) : signedEUR(val)}</span></div>`;
   };
-  document.getElementById('bf-year').textContent = year + ' · budgeted';
+  document.getElementById('bf-year').textContent = year + ' · budgeted vs actual';
   document.getElementById('bf-rollup').innerHTML =
-    `<div class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Budgeted roll-up</div>` +
+    `<div class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Budgeted roll-up (full year)</div>` +
     line('Recurring income', income) +
     line('Recurring spending', -spend) +
     line('= Gross worth (monthly living)', gross, { top: true, bold: true }) +
     line('Yearly one-offs', -oneoffs) +
     line('Incidentals (' + year + ')', -incidentals) +
     line('= Net result', netResult, { top: true, bold: true }) +
-    line('Investments (to beleggen)', -invest) +
     line('Net-worth start (31-12-' + (year - 1) + ')', start, { plain: true, muted: true }) +
-    line('= Buffer year-end', endComponents, { top: true, bold: true, plain: true });
+    line('= Net worth year-end', netWorthEnd, { top: true, bold: true, plain: true }) +
+    line('   of which invested', invest, { plain: true, muted: true }) +
+    line('   of which buffer', bufferEnd, { plain: true, muted: true });
 
   // Actuals so far (loaded months of the base year)
   const m = (agg.monthsByYear[year] && agg.monthsByYear[year].size) || 0;
   const aInc = agg.recurringIncomeByYear[year] || 0;
   const aSpend = agg.recurringSpendByYear[year] || 0;
   const aGross = aInc - aSpend;
-  const expGross = gross * (m / 12);
+  const aOneoffs = agg.yearlyTotal;
+  const aIncid = agg.incidentalTotal;
+  const aInvested = agg.invest.total;
+  const aNetResult = aGross - aOneoffs - aIncid;
+  const netWorthActual = start + aNetResult;                 // total net worth right now (incl. invested)
+  const bufferActual = netWorthActual - aInvested;           // liquid buffer right now
   document.getElementById('bf-actuals').innerHTML =
     `<div class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Actuals so far · ${m} month(s)</div>` +
-    line('Income actual', aInc, { plain: true }) +
-    line('  vs budget pro-rata', income * (m / 12), { plain: true, muted: true }) +
-    line('Spending actual', -aSpend, { plain: true }) +
-    line('  vs budget pro-rata', -spend * (m / 12), { plain: true, muted: true }) +
+    line('Income actual', aInc) +
+    line('Spending actual', -aSpend) +
     line('= Gross worth actual', aGross, { top: true, bold: true }) +
-    line('  vs budget pro-rata', expGross, { plain: true, muted: true }) +
-    line('Ahead / behind', aGross - expGross, { top: true, bold: true });
+    line('   vs budget pro-rata', gross * (m / 12), { plain: true, muted: true }) +
+    line('Yearly one-offs actual', -aOneoffs) +
+    line('Incidentals actual', -aIncid) +
+    line('= Net result actual', aNetResult, { top: true, bold: true }) +
+    line('Net-worth start (31-12-' + (year - 1) + ')', start, { plain: true, muted: true }) +
+    line('= Net worth actual', netWorthActual, { top: true, bold: true, plain: true }) +
+    line('   of which invested', aInvested, { plain: true, muted: true }) +
+    line('   of which buffer', bufferActual, { plain: true, muted: true });
 
   document.getElementById('bf-notes').innerHTML =
     `<div class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Reconciliation</div>` +
-    `<p>The plan line is driven by the sheet's <b>operational result</b> (€${fmtEUR0.format(OP_RESULT[year]).replace('€','').trim()}), ` +
+    `<p>The plan line is driven by the sheet's <b>operational result</b> (€${fmtEUR0.format(OP_RESULT[year]).replace('€', '').trim()}), ` +
     `while your components give income − spend − one-offs = <b>${fmtEUR0.format(gross - oneoffs)}</b>. ` +
     (Math.abs(recoGap) > 1
-      ? `That leaves a <b class="text-amber-300">${fmtEUR0.format(Math.abs(recoGap))}</b> gap between the component-based year-end buffer (${fmtEUR0.format(endComponents)}) and the plan's (${fmtEUR0.format(endPlan)}) — worth checking which figure in the sheet is off.</p>`
+      ? `That leaves a <b class="text-amber-300">${fmtEUR0.format(Math.abs(recoGap))}</b> gap between the component-based year-end buffer (${fmtEUR0.format(bufferEnd)}) and the plan's (${fmtEUR0.format(endPlan)}) — worth checking which figure in the sheet is off.</p>`
       : `These reconcile.</p>`) +
-    `<p class="mt-1.5 text-slate-500">Gross worth answers “can we afford monthly living”. Net result also absorbs the one-offs and incidentals. The buffer excludes invested capital (toggle it on in the projection legend).</p>`;
+    `<p class="mt-1.5 text-slate-500">Net worth = buffer + invested capital (transfers to savings/beleggen stay in net worth). Gross worth answers “can we afford monthly living”; net result also absorbs one-offs and incidentals.</p>`;
 }
 
 function signedEUR(v) { return (v >= 0 ? '+' : '−') + fmtEUR0.format(Math.abs(v)); }
@@ -1605,6 +1630,22 @@ function renderIncidentalTracker(agg) {
     (sel === 'all' ? '' : sel + ': ') +
     `spent ${fmtEUR0.format(totSpent)} of ${fmtEUR0.format(totBudget)} planned · ` +
     (remaining >= 0 ? fmtEUR0.format(remaining) + ' remaining' : fmtEUR0.format(-remaining) + ' OVER budget');
+  document.getElementById('inc-headline').innerHTML =
+    trackerHeadline((sel === 'all' ? 'All years' : sel) + ' · spent vs MJP budget', totSpent, totBudget, 'bg-cyan-500');
+}
+
+// Big always-visible summary bar for a collapsible tracker
+function trackerHeadline(label, spent, budget, color, sub) {
+  const pct = budget > 0 ? Math.min(100, spent / budget * 100) : (spent > 0 ? 100 : 0);
+  const over = budget > 0 && spent > budget;
+  const remaining = budget - spent;
+  return `<div class="flex flex-wrap justify-between items-baseline gap-2 mb-1.5">
+      <span class="text-sm text-slate-300">${label}</span>
+      <span class="text-sm"><span class="font-bold ${over ? 'text-rose-300' : 'text-slate-100'}">${fmtEUR0.format(spent)}</span> <span class="text-slate-500">of ${fmtEUR0.format(budget)}</span>` +
+    `<span class="ml-2 ${over ? 'text-rose-400' : 'text-slate-400'}">${remaining >= 0 ? fmtEUR0.format(remaining) + ' left' : fmtEUR0.format(-remaining) + ' over'}</span></span>
+    </div>
+    <div class="h-3 rounded-full bg-slate-800 overflow-hidden"><div class="h-full ${over ? 'bg-rose-500' : color} transition-all" style="width:${pct.toFixed(1)}%"></div></div>` +
+    (sub ? `<div class="text-[11px] text-slate-500 mt-1">${sub}</div>` : '');
 }
 
 function renderYearlyTracker(agg) {
@@ -1662,6 +1703,9 @@ function renderYearlyTracker(agg) {
     (sel === 'all' ? '' : sel + ': ') +
     `${fmtEUR0.format(totSpent)} spent of ${fmtEUR0.format(totBudget)}/yr · ` +
     (vs <= 0 ? fmtEUR0.format(-vs) + ' under pro-rata' : fmtEUR0.format(vs) + ' over pro-rata');
+  document.getElementById('yr-headline').innerHTML =
+    trackerHeadline((sel === 'all' ? 'All loaded' : sel) + ' · spent vs annual budget', totSpent, totBudget, 'bg-violet-500',
+      `Pro-rata you’d expect ${fmtEUR0.format(expectedTot)} spent by now — ${vs <= 0 ? fmtEUR0.format(-vs) + ' under' : '<span class="text-rose-400">' + fmtEUR0.format(vs) + ' over</span>'}.`);
 
   renderYearlyEditor();
 }
@@ -2043,6 +2087,29 @@ document.getElementById('inc-year-filter').addEventListener('click', (ev) => {
   recomputeAll();
 });
 
+// Collapsible tracker sections (minimalist by default)
+function applyDisclosures() {
+  document.querySelectorAll('.disc-btn').forEach(b => {
+    const open = !!settings[b.dataset.key];
+    const t = document.getElementById(b.dataset.target);
+    if (t) t.classList.toggle('hidden', !open);
+    const caret = b.querySelector('.caret');
+    if (caret) caret.textContent = open ? '▴' : '▾';
+  });
+}
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.disc-btn');
+  if (!b) return;
+  const t = document.getElementById(b.dataset.target);
+  if (!t) return;
+  t.classList.toggle('hidden');
+  const open = !t.classList.contains('hidden');
+  const caret = b.querySelector('.caret');
+  if (caret) caret.textContent = open ? '▴' : '▾';
+  settings[b.dataset.key] = open;
+  saveJSON(LS_KEYS.settings, settings);
+});
+
 // Ask your numbers — floating widget open/minimize
 let agentGreeted = false;
 function openAgent() {
@@ -2255,6 +2322,7 @@ function bindSettingValues() {
   refreshSignUI();
   recomputeAll();
   renderTable();
+  applyDisclosures();
 })();
 </script>
 </body>
