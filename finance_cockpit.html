@@ -84,6 +84,22 @@
     </div>
   </section>
 
+  <!-- Ask your numbers (local analyst) -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h2 class="font-semibold text-white">💬 Ask your numbers</h2>
+      <span class="text-[11px] text-slate-500 ml-auto">runs entirely in your browser · no data leaves this page</span>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-3">Ask things like “why is my spending higher than budget?”, “how much did I spend on boodschappen?”, “how much did we save?”, “am I on track?”. Answers are computed from your loaded transactions.</p>
+    <div id="agent-log" class="space-y-3 mb-3 max-h-[28rem] overflow-y-auto"></div>
+    <div id="agent-suggest" class="flex flex-wrap gap-1.5 mb-2"></div>
+    <form id="agent-form" class="flex gap-2">
+      <input id="agent-input" type="text" autocomplete="off" placeholder="Ask about your numbers…"
+             class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500">
+      <button type="submit" class="text-sm font-semibold bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg">Ask</button>
+    </form>
+  </section>
+
   <!-- Projection + settings -->
   <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -644,6 +660,7 @@ for (const p of projects) {
   if (p.done === undefined) p.done = false;
 }
 let yearly = loadJSON(LS_KEYS.yearly) || DEFAULT_YEARLY.map(y => ({ ...y }));
+let lastAgg = null;   // most recent full aggregate, for the Ask-your-numbers analyst
 let activeFilter = 'all';
 let catFilter = settings.catFilter ? new Set(settings.catFilter) : null; // null = all categories shown
 let signFilter = settings.signFilter || 'all'; // 'all' | 'in' (positive) | 'out' (negative)
@@ -851,7 +868,7 @@ function aggregate(txList) {
     incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
     yearlyByYear: {}, yearlyByItem: {}, yearlyByItemYear: {}, yearlyTotal: 0, yearlyCount: 0,
     excludedTotal: 0,
-    spendByCat: {}, flowByMonth: {},
+    spendByCat: {}, recurringSpendByCat: {}, flowByMonth: {},
     savings: { byMonth: {}, deposit: 0, withdraw: 0, depositInc: 0, withdrawInc: 0, count: 0, items: [] },
     invest: { byYear: {}, total: 0, count: 0, items: [] }
   };
@@ -924,6 +941,7 @@ function aggregate(txList) {
         agg.recurringSpend += -t.amount;
         agg.recurringSpendByYear[year] = (agg.recurringSpendByYear[year] || 0) - t.amount;
         agg.recurringSpendByMonth[month] = (agg.recurringSpendByMonth[month] || 0) - t.amount;
+        agg.recurringSpendByCat[e.bankCat] = (agg.recurringSpendByCat[e.bankCat] || 0) - t.amount;
       }
     }
   }
@@ -1154,6 +1172,7 @@ function recomputeAll() {
   refreshTimeUI();
   rebuildInvestIbans();                                    // auto-detect broker accounts before classifying
   const aggFull = aggregate(transactions);                 // drives projection, deviation, incidentals
+  lastAgg = aggFull;                                        // the "Ask your numbers" analyst queries this
   const aggView = aggregate(getFilteredTransactions());    // drives the time-filtered spend/earn views
   const periodTxt = activePeriodLabel();
 
@@ -1272,6 +1291,146 @@ function renderBudgetFramework(agg, plan) {
 }
 
 function signedEUR(v) { return (v >= 0 ? '+' : '−') + fmtEUR0.format(Math.abs(v)); }
+
+/* ================================================================
+   "Ask your numbers" — local deterministic analyst. Parses the question
+   by keyword/entity and computes an exact answer from lastAgg. No network.
+   ================================================================ */
+const AGENT_SUGGESTIONS = [
+  'Why is my spending higher than budget?',
+  'How much did I spend on Boodschappen?',
+  'How much did we save?',
+  'Am I on track?',
+  'Biggest expenses'
+];
+function agentTop(obj, n) {
+  return Object.entries(obj).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+function agentCatRows(pairs, total) {
+  return pairs.map(([k, v]) =>
+    `<div class="flex justify-between gap-3"><span class="text-slate-400 truncate">${esc(k)}</span>` +
+    `<span class="font-mono text-slate-300">${fmtEUR0.format(v)}${total ? ` <span class="text-slate-600">${(v / total * 100).toFixed(0)}%</span>` : ''}</span></div>`).join('');
+}
+function agentBiggest(filter, n) {
+  return transactions.filter(t => effective(t).cls !== 'exclude' && t.amount < 0 && (!filter || filter(t)))
+    .sort((a, b) => a.amount - b.amount).slice(0, n)
+    .map(t => `<div class="flex justify-between gap-3"><span class="text-slate-400 truncate">${esc(t.date.slice(5))} ${esc(t.name || t.desc.slice(0, 30))}</span>` +
+      `<span class="font-mono text-rose-300">${fmtEUR0.format(-t.amount)}</span></div>`).join('');
+}
+function agentMatchEntity(q) {
+  const cands = [];
+  for (const c of Object.keys(lastAgg.spendByCat)) cands.push({ type: 'cat', name: c });
+  for (const p of projects) cands.push({ type: 'project', name: p.name });
+  for (const y of yearly) cands.push({ type: 'yearly', name: y.name });
+  let best = null;
+  for (const c of cands) {
+    const nm = c.name.toLowerCase();
+    if (nm.length >= 4 && q.includes(nm) && (!best || c.name.length > best.name.length)) best = c;
+  }
+  return best;
+}
+
+function agentAnswer(rawq) {
+  const agg = lastAgg;
+  if (!agg || !transactions.length) return 'No transactions are loaded yet — import a statement first.';
+  const q = ' ' + rawq.toLowerCase() + ' ';
+  const has = (...ws) => ws.some(w => q.includes(w));
+  const months = agg.months.size;
+  const range = [...agg.months].sort();
+  const period = months + ' month(s) loaded (' + range[0] + '…' + range[range.length - 1] + ')';
+
+  if (has('save', 'saving', 'saved', 'spaar')) {
+    const s = agg.savings;
+    return `Over ${period}, net into savings is <b>${signedEUR(s.net)}</b> (${fmtEUR0.format(s.deposit)} deposited − ${fmtEUR0.format(s.withdraw)} taken back). ` +
+      `Stripping the large one-offs, the <b>regular</b> rhythm is ${signedEUR(s.netReg)} (${signedEUR(s.netRegPerMonth)}/mo). ` +
+      `The small bookings back to current total ${fmtEUR0.format(s.withdrawReg)}.`;
+  }
+  if (has('invest', 'beleg', 'broker', 'degiro', 'meesman')) {
+    const inv = agg.invest;
+    if (!inv.total) return `No investment injections detected in the loaded data. ${investDetected.length ? 'A broker account is recognised but no transfers landed yet.' : 'Add your broker IBAN in ⚙ Settings if injections aren’t being picked up.'}`;
+    return `Invested so far: <b>${fmtEUR0.format(inv.total)}</b> across ${inv.count} injection(s)` +
+      (Object.keys(inv.byYear).length ? ' (' + Object.entries(inv.byYear).map(([y, v]) => y + ': ' + fmtEUR0.format(v)).join(', ') + ').' : '.');
+  }
+  if (has('on track', 'track', 'net worth', 'networth', 'vermogen', 'projection', 'buffer', 'grens', 'critical')) {
+    const { plan, actual } = projectSeries(agg);
+    const endYear = PROJECTION_START_YEAR + settings.horizon;
+    const diff = actual[actual.length - 1] - plan[plan.length - 1];
+    let firstBelow = -1;
+    for (let i = 1; i < actual.length; i++) if (actual[i] < CRITICAL_THRESHOLD) { firstBelow = PROJECTION_START_YEAR + i; break; }
+    return `Plan vs actual: with the loaded months folded in, your projected buffer in ${endYear} is <b>${fmtEUR0.format(actual[actual.length - 1])}</b>, ` +
+      `${diff >= 0 ? signedEUR(diff) + ' ahead of' : signedEUR(diff) + ' behind'} the MJP plan. ` +
+      (firstBelow > 0
+        ? `⚠️ The buffer dips below the €15k kritieke grens around <b>${firstBelow}</b> — investments are still safe, but the liquid buffer gets thin.`
+        : `The buffer stays above the €15k kritieke grens throughout.`) +
+      ` This year you’re ${signedEUR(agg.deviationByYear[PROJECTION_START_YEAR] || 0)} vs budget on gross worth.`;
+  }
+  if (has('income', 'earn', 'salary', 'salaris', 'inkomen', 'verdien', 'earning')) {
+    const actual = agg.recurringIncome, budget = settings.monthlyIncome * months;
+    const gap = actual - budget;
+    const bySource = {};
+    for (const t of transactions) { if (effective(t).cls === 'recurring' && t.amount > 0) bySource[t.name || t.desc.slice(0, 24)] = (bySource[t.name || t.desc.slice(0, 24)] || 0) + t.amount; }
+    return `Over ${period}, recurring income is <b>${fmtEUR0.format(actual)}</b> vs ${fmtEUR0.format(budget)} budgeted — ${signedEUR(gap)} ` +
+      `(${fmtEUR0.format(actual / months)}/mo vs ${fmtEUR0.format(settings.monthlyIncome)}). ` +
+      `Largest sources:<div class="mt-1">${agentCatRows(agentTop(bySource, 4), actual)}</div>` +
+      (gap > 0 ? `<div class="mt-1 text-slate-500">The surplus is often a vakantiegeld / 13th-month month and evens out over the year.</div>` : '');
+  }
+  if (has('biggest', 'largest', 'top ', 'grootste', 'duurste', 'most expensive')) {
+    return `Biggest expenses over ${period} (transfers excluded):<div class="mt-1">${agentBiggest(null, 8)}</div>`;
+  }
+
+  const ent = agentMatchEntity(q);
+  if (ent && !has('why', 'higher', 'lower', 'over budget')) {
+    if (ent.type === 'cat') {
+      const tot = agg.spendByCat[ent.name] || 0;
+      return `<b>${esc(ent.name)}</b>: ${fmtEUR0.format(tot)} spent over ${period} (${fmtEUR0.format(tot / months)}/mo). ` +
+        `Largest:<div class="mt-1">${agentBiggest(t => effective(t).bankCat === ent.name, 6)}</div>`;
+    }
+    if (ent.type === 'project') {
+      const p = projects.find(x => x.name === ent.name); const spent = agg.incidentalByProject[ent.name] || 0;
+      return `Incidental project <b>${esc(ent.name)}</b> (planned ${p.year}${p.done ? ', marked done' : ''}): spent <b>${fmtEUR0.format(spent)}</b> of ${fmtEUR0.format(p.budget)} budget — ${signedEUR(p.budget - spent)} ${p.budget - spent >= 0 ? 'left' : 'over'}.`;
+    }
+    if (ent.type === 'yearly') {
+      const y = yearly.find(x => x.name === ent.name); const spent = agg.yearlyByItem[ent.name] || 0;
+      const expected = (y.budget || 0) * (months / 12);
+      return `Yearly item <b>${esc(ent.name)}</b>: spent <b>${fmtEUR0.format(spent)}</b> of ${fmtEUR0.format(y.budget)}/yr (expected ${fmtEUR0.format(expected)} by now) — ${spent > expected ? signedEUR(spent - expected) + ' ahead of pro-rata' : signedEUR(spent - expected) + ' behind pro-rata'}.`;
+    }
+  }
+
+  if (has('spend', 'spent', 'spending', 'uitgave', 'uitgaven', 'cost', 'higher', 'lower', 'over budget', 'overspent', 'under budget')) {
+    const actual = agg.recurringSpend, budget = settings.monthlyBudget * months;
+    const gap = actual - budget; // + = over
+    const annual = (actual / months) * 12, annualBudget = settings.monthlyBudget * 12;
+    const cats = agentTop(agg.recurringSpendByCat, 5);
+    return `Over ${period}, your <b>monthly-living</b> (recurring) spend is <b>${fmtEUR0.format(actual)}</b> vs ${fmtEUR0.format(budget)} budgeted — ` +
+      `<b class="${gap > 0 ? 'text-rose-300' : 'text-emerald-300'}">${gap > 0 ? fmtEUR0.format(gap) + ' over' : fmtEUR0.format(-gap) + ' under'}</b> ` +
+      `(${fmtEUR0.format(actual / months)}/mo vs ${fmtEUR0.format(settings.monthlyBudget)}). ` +
+      `At this rate the year lands ~${fmtEUR0.format(annual)} vs ${fmtEUR0.format(annualBudget)} budget (${signedEUR(annual - annualBudget)}). ` +
+      `Biggest categories driving it:<div class="mt-1">${agentCatRows(cats, actual)}</div>` +
+      `<div class="mt-1.5 text-slate-500">Budgeted separately, not in this figure: yearly one-offs ${fmtEUR0.format(agg.yearlyTotal)} (e.g. vacations) and incidental projects ${fmtEUR0.format(agg.incidentalTotal)}. ` +
+      `If your “anticipated” number was the all-in figure, add those back.</div>`;
+  }
+
+  // Fallback summary
+  const { plan, actual } = projectSeries(agg);
+  return `Here’s the picture over ${period}: recurring income ${fmtEUR0.format(agg.recurringIncome)} vs spend ${fmtEUR0.format(agg.recurringSpend)} ` +
+    `→ gross worth ${signedEUR(agg.recurringIncome - agg.recurringSpend)}. Yearly one-offs ${fmtEUR0.format(agg.yearlyTotal)}, incidentals ${fmtEUR0.format(agg.incidentalTotal)}, net into savings ${signedEUR(agg.savings.net)}. ` +
+    `Projected buffer in ${PROJECTION_START_YEAR + settings.horizon}: ${fmtEUR0.format(actual[actual.length - 1])}. ` +
+    `<div class="mt-1 text-slate-500">Try: “why is my spending higher than budget?”, “how much on Boodschappen?”, “how much did we save?”, “am I on track?”.</div>`;
+}
+
+function agentAsk(q) {
+  q = (q || '').trim();
+  if (!q) return;
+  const log = document.getElementById('agent-log');
+  log.insertAdjacentHTML('beforeend',
+    `<div class="flex justify-end"><div class="bg-cyan-900/40 border border-cyan-800 rounded-lg px-3 py-2 text-sm text-cyan-100 max-w-[85%]">${esc(q)}</div></div>` +
+    `<div class="flex justify-start"><div class="bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 max-w-[92%] leading-relaxed">${agentAnswer(q)}</div></div>`);
+  log.scrollTop = log.scrollHeight;
+}
+function renderAgentSuggestions() {
+  document.getElementById('agent-suggest').innerHTML = AGENT_SUGGESTIONS.map(s =>
+    `<button class="ag-sugg text-[11px] bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-full px-2.5 py-1">${esc(s)}</button>`).join('');
+}
 
 // Two views in one slot (separate canvases): the multi-year MJP net-worth
 // projection, or year-to-date cumulative recurring income & spend vs budget.
@@ -1892,6 +2051,18 @@ document.getElementById('inc-year-filter').addEventListener('click', (ev) => {
   recomputeAll();
 });
 
+// Ask your numbers
+document.getElementById('agent-form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const input = document.getElementById('agent-input');
+  agentAsk(input.value);
+  input.value = '';
+});
+document.getElementById('agent-suggest').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.ag-sugg');
+  if (b) agentAsk(b.textContent);
+});
+
 // Yearly tracker: year filter
 document.getElementById('yr-year-filter').addEventListener('click', (ev) => {
   const b = ev.target.closest('.yy');
@@ -2071,6 +2242,7 @@ function bindSettingValues() {
   }
   bindSettings();
   renderProjects();
+  renderAgentSuggestions();
   refreshSignUI();
   recomputeAll();
   renderTable();
