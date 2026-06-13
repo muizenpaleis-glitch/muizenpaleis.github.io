@@ -84,22 +84,6 @@
     </div>
   </section>
 
-  <!-- Ask your numbers (local analyst) -->
-  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-    <div class="flex flex-wrap items-center gap-2 mb-1">
-      <h2 class="font-semibold text-white">💬 Ask your numbers</h2>
-      <span class="text-[11px] text-slate-500 ml-auto">runs entirely in your browser · no data leaves this page</span>
-    </div>
-    <p class="text-[11px] text-slate-500 mb-3">Ask things like “why is my spending higher than budget?”, “how much did I spend on boodschappen?”, “how much did we save?”, “am I on track?”. Answers are computed from your loaded transactions.</p>
-    <div id="agent-log" class="space-y-3 mb-3 max-h-[28rem] overflow-y-auto"></div>
-    <div id="agent-suggest" class="flex flex-wrap gap-1.5 mb-2"></div>
-    <form id="agent-form" class="flex gap-2">
-      <input id="agent-input" type="text" autocomplete="off" placeholder="Ask about your numbers…"
-             class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500">
-      <button type="submit" class="text-sm font-semibold bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg">Ask</button>
-    </form>
-  </section>
-
   <!-- Projection + settings -->
   <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -111,10 +95,7 @@
         </div>
       </div>
       <p id="proj-subtitle" class="text-[11px] text-slate-500 mb-2"></p>
-      <div class="relative h-80">
-        <canvas id="chart-projection" class="absolute inset-0"></canvas>
-        <canvas id="chart-ytd" class="absolute inset-0 hidden"></canvas>
-      </div>
+      <div class="relative h-80"><canvas id="chart-projection"></canvas></div>
     </div>
     <div id="settings-panel" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 transition-shadow">
       <h2 class="font-semibold text-white">⚙ Settings <span class="text-[11px] font-normal text-slate-500">(projection, accounts &amp; thresholds — persisted in localStorage)</span></h2>
@@ -348,6 +329,28 @@
     cheaper or more expensive than planned all flow through correctly; only spend without budget left dents the projection.
   </footer>
 </main>
+
+<!-- Ask your numbers — floating, minimizable widget -->
+<button id="agent-launcher" class="fixed bottom-5 right-5 z-40 flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm px-4 py-3 rounded-full shadow-lg shadow-cyan-900/40">
+  <span class="text-lg leading-none">💬</span> Ask your numbers
+</button>
+<div id="agent-panel" class="hidden fixed bottom-5 right-5 z-50 w-[min(26rem,calc(100vw-2.5rem))] h-[min(34rem,calc(100vh-2.5rem))] flex flex-col bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl shadow-black/50">
+  <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-800">
+    <span class="text-lg leading-none">💬</span>
+    <div class="leading-tight">
+      <div class="font-semibold text-white text-sm">Ask your numbers</div>
+      <div class="text-[10px] text-slate-500">runs in your browser · no data leaves this page</div>
+    </div>
+    <button id="agent-min" class="ml-auto text-slate-400 hover:text-white w-7 h-7 rounded-lg hover:bg-slate-800 flex items-center justify-center" title="Minimize">▾</button>
+  </div>
+  <div id="agent-log" class="flex-1 overflow-y-auto px-4 py-3 space-y-3"></div>
+  <div class="px-4 pb-2"><div id="agent-suggest" class="flex flex-wrap gap-1.5"></div></div>
+  <form id="agent-form" class="flex gap-2 p-3 border-t border-slate-800">
+    <input id="agent-input" type="text" autocomplete="off" placeholder="Ask about your numbers…"
+           class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500">
+    <button type="submit" class="text-sm font-semibold bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg">Ask</button>
+  </form>
+</div>
 
 <script id="app-js">
 'use strict';
@@ -1104,42 +1107,31 @@ Chart.defaults.color = '#94a3b8';
 Chart.defaults.borderColor = 'rgba(51,65,85,.5)';
 Chart.defaults.font.family = 'ui-sans-serif, system-ui, sans-serif';
 
+let investedShown = false; // legend toggle for the "incl. invested capital" line (multi view)
 const chartProjection = new Chart(document.getElementById('chart-projection'), {
   type: 'line',
   data: { labels: [], datasets: [
-    { label: 'Plan (MJP Netto Resultaat)', data: [], borderColor: '#475569', backgroundColor: 'rgba(71,85,105,.08)',
-      borderDash: [6, 4], pointRadius: 0, tension: 0.15, fill: true },
-    { label: 'Actual (incl. loaded data)', data: [], borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,.10)',
-      pointRadius: 2, pointBackgroundColor: '#22d3ee', tension: 0.15, fill: true },
-    { label: 'Kritieke grens (€15k)', data: [], borderColor: 'rgba(244,63,94,.7)', borderWidth: 1.5,
-      borderDash: [3, 3], pointRadius: 0, fill: false },
-    { label: 'Incl. invested capital', data: [], borderColor: '#a78bfa', borderWidth: 1.5,
-      borderDash: [6, 4], pointRadius: 0, tension: 0.15, fill: false, hidden: true }
+    { label: 'Plan', data: [] },
+    { label: 'Actual', data: [] },
+    { label: 'C', data: [] },
+    { label: 'D', data: [] }
   ]},
   options: {
     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { labels: { boxWidth: 14,
-        filter: (item, data) => data.datasets[item.datasetIndex].data.length > 0 } },
-      tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR0.format(c.parsed.y)}` } } },
-    scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } } }
-  }
-});
-
-// Year-to-date: cumulative recurring income & spend, actual vs budget (its own
-// chart so the net-worth view's styling never leaks). One-offs/incidentals excluded.
-const chartYtd = new Chart(document.getElementById('chart-ytd'), {
-  type: 'line',
-  data: { labels: [], datasets: [
-    { label: 'Income — actual', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.10)', pointRadius: 2, tension: 0.15, fill: false },
-    { label: 'Income — budget', data: [], borderColor: 'rgba(52,211,153,.5)', borderDash: [6, 4], pointRadius: 0, tension: 0, fill: false },
-    { label: 'Spend — actual', data: [], borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,.10)', pointRadius: 2, tension: 0.15, fill: false },
-    { label: 'Spend — budget', data: [], borderColor: 'rgba(251,113,133,.5)', borderDash: [6, 4], pointRadius: 0, tension: 0, fill: false }
-  ]},
-  options: {
-    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { labels: { boxWidth: 14 } },
-      tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR0.format(c.parsed.y)}` } } },
-    scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } } }
+    plugins: {
+      legend: { labels: { boxWidth: 14, filter: (item, data) => data.datasets[item.datasetIndex].data.length > 0 },
+        onClick(e, item, legend) {
+          const dss = legend.chart.data.datasets, i = item.datasetIndex;
+          dss[i].hidden = !dss[i].hidden;
+          legend.chart.update();
+          if (settings.projView !== 'ytd' && /invested/i.test(dss[i].label || '')) investedShown = !dss[i].hidden;
+        } },
+      tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR0.format(c.parsed.y)}` } }
+    },
+    scales: {
+      x: { ticks: { maxRotation: 0, autoSkip: true, autoSkipPadding: 12 } },
+      y: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } }
+    }
   }
 });
 
@@ -1432,56 +1424,56 @@ function renderAgentSuggestions() {
     `<button class="ag-sugg text-[11px] bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-full px-2.5 py-1">${esc(s)}</button>`).join('');
 }
 
-// Two views in one slot (separate canvases): the multi-year MJP net-worth
-// projection, or year-to-date cumulative recurring income & spend vs budget.
-// One-offs/incidentals are excluded from YTD — it measures month-to-month living.
+// One canvas, two fully-restyled views: the multi-year MJP net-worth projection,
+// or year-to-date cumulative recurring income & spend vs budget. Every dataset
+// property is set per view so nothing leaks between them.
+function styleDS(ds, o) {
+  ds.label = o.label; ds.data = o.data;
+  ds.borderColor = o.borderColor; ds.backgroundColor = o.backgroundColor || 'transparent';
+  ds.borderDash = o.borderDash || []; ds.borderWidth = o.borderWidth || 2;
+  ds.pointRadius = o.pointRadius || 0; ds.pointBackgroundColor = o.borderColor;
+  ds.tension = o.tension || 0; ds.fill = !!o.fill; ds.hidden = !!o.hidden;
+}
 function updateProjectionChart(agg, plan, actual, total) {
   const view = settings.projView === 'ytd' ? 'ytd' : 'multi';
   document.querySelectorAll('.pv').forEach(b => b.classList.toggle('bg-slate-800', b.dataset.view === view));
-  document.getElementById('chart-projection').classList.toggle('hidden', view === 'ytd');
-  document.getElementById('chart-ytd').classList.toggle('hidden', view !== 'ytd');
+  const ds = chartProjection.data.datasets;
 
   if (view === 'ytd') {
     const years = Object.keys(agg.monthsByYear).map(Number);
     const year = years.length ? Math.max(...years) : new Date().getFullYear();
     const months = [...(agg.monthsByYear[year] || [])].sort();
-    const incActual = [], incBudget = [], spActual = [], spBudget = [];
+    const incA = [], incB = [], spA = [], spB = [];
     let ci = 0, cs = 0;
     months.forEach((m, i) => {
-      ci += agg.recurringIncomeByMonth[m] || 0;
-      cs += agg.recurringSpendByMonth[m] || 0;
-      incActual.push(ci); spActual.push(cs);
-      incBudget.push(settings.monthlyIncome * (i + 1));
-      spBudget.push(settings.monthlyBudget * (i + 1));
+      ci += agg.recurringIncomeByMonth[m] || 0; cs += agg.recurringSpendByMonth[m] || 0;
+      incA.push(ci); spA.push(cs);
+      incB.push(settings.monthlyIncome * (i + 1)); spB.push(settings.monthlyBudget * (i + 1));
     });
-    chartYtd.data.labels = months.map(labelMonth);
-    chartYtd.data.datasets[0].data = incActual;
-    chartYtd.data.datasets[1].data = incBudget;
-    chartYtd.data.datasets[2].data = spActual;
-    chartYtd.data.datasets[3].data = spBudget;
-    chartYtd.resize(); chartYtd.update();
+    chartProjection.data.labels = months.map(labelMonth);
+    styleDS(ds[0], { label: 'Income — actual', data: incA, borderColor: '#34d399', pointRadius: 3, tension: 0.15 });
+    styleDS(ds[1], { label: 'Income — budget', data: incB, borderColor: 'rgba(52,211,153,.55)', borderDash: [6, 4], borderWidth: 1.5 });
+    styleDS(ds[2], { label: 'Spend — actual', data: spA, borderColor: '#fb7185', pointRadius: 3, tension: 0.15 });
+    styleDS(ds[3], { label: 'Spend — budget', data: spB, borderColor: 'rgba(251,113,133,.55)', borderDash: [6, 4], borderWidth: 1.5 });
 
-    const balAct = ci - cs, balBud = (settings.monthlyIncome - settings.monthlyBudget) * months.length;
-    const dev = balAct - balBud;
+    const balAct = ci - cs, balBud = (settings.monthlyIncome - settings.monthlyBudget) * months.length, dev = balAct - balBud;
     document.getElementById('proj-title').textContent = 'Year to date ' + year + ' — earnings vs spendings';
     document.getElementById('proj-subtitle').textContent =
-      months.length + ' month(s) · gross worth (income − spend), one-offs & incidentals excluded · ' +
-      'balance ' + signedEUR(balAct) + ' vs budget ' + signedEUR(balBud) + ' → ' +
-      (dev >= 0 ? signedEUR(dev) + ' ahead' : signedEUR(dev) + ' behind');
+      months.length + ' month(s) · cumulative recurring income & spend (one-offs & incidentals excluded) · ' +
+      'balance ' + signedEUR(balAct) + ' vs budget ' + signedEUR(balBud) + ' → ' + (dev >= 0 ? signedEUR(dev) + ' ahead' : signedEUR(dev) + ' behind');
   } else {
-    const ds = chartProjection.data.datasets;
     const labels = [];
     for (let i = 0; i <= settings.horizon; i++) labels.push(String(PROJECTION_START_YEAR + i));
     chartProjection.data.labels = labels;
-    ds[0].label = 'Plan (MJP)'; ds[0].data = plan;
-    ds[1].label = 'Actual (incl. loaded data)'; ds[1].data = actual;
-    ds[2].data = labels.map(() => CRITICAL_THRESHOLD);
-    ds[3].data = total;
-    chartProjection.resize(); chartProjection.update();
+    styleDS(ds[0], { label: 'Plan (MJP)', data: plan, borderColor: '#64748b', backgroundColor: 'rgba(100,116,139,.08)', borderDash: [6, 4], tension: 0.15, fill: true });
+    styleDS(ds[1], { label: 'Actual (incl. loaded data)', data: actual, borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,.10)', pointRadius: 2, tension: 0.15, fill: true });
+    styleDS(ds[2], { label: 'Kritieke grens (€15k)', data: labels.map(() => CRITICAL_THRESHOLD), borderColor: 'rgba(244,63,94,.7)', borderDash: [3, 3], borderWidth: 1.5 });
+    styleDS(ds[3], { label: 'Incl. invested capital', data: total, borderColor: '#a78bfa', borderDash: [6, 4], borderWidth: 1.5, tension: 0.15, hidden: !investedShown });
     document.getElementById('proj-title').textContent = 'Net worth projection — corrected MJP model';
     document.getElementById('proj-subtitle').textContent =
-      'Op. resultaat − investeringen − incidentelen per jaar · click "Incl. invested capital" in the legend to add the beleggingspot';
+      'Op. resultaat − investeringen − incidentelen per jaar · toggle "Incl. invested capital" in the legend to add the beleggingspot';
   }
+  chartProjection.update();
 }
 
 function renderSavings(agg) {
@@ -2051,7 +2043,24 @@ document.getElementById('inc-year-filter').addEventListener('click', (ev) => {
   recomputeAll();
 });
 
-// Ask your numbers
+// Ask your numbers — floating widget open/minimize
+let agentGreeted = false;
+function openAgent() {
+  document.getElementById('agent-panel').classList.remove('hidden');
+  document.getElementById('agent-launcher').classList.add('hidden');
+  if (!agentGreeted) {
+    agentGreeted = true;
+    document.getElementById('agent-log').insertAdjacentHTML('beforeend',
+      `<div class="flex justify-start"><div class="bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 max-w-[92%] leading-relaxed">Hi! Ask me about your numbers — variance, categories, savings, whether you’re on track. Tap a suggestion or type below.</div></div>`);
+  }
+  document.getElementById('agent-input').focus();
+}
+function minimizeAgent() {
+  document.getElementById('agent-panel').classList.add('hidden');
+  document.getElementById('agent-launcher').classList.remove('hidden');
+}
+document.getElementById('agent-launcher').addEventListener('click', openAgent);
+document.getElementById('agent-min').addEventListener('click', minimizeAgent);
 document.getElementById('agent-form').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const input = document.getElementById('agent-input');
