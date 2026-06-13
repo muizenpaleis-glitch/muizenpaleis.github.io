@@ -64,9 +64,9 @@
       <div id="kpi-spend-sub" class="text-[11px] text-slate-500 mt-0.5"></div>
     </div>
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <div class="text-[11px] uppercase tracking-wider text-slate-500">Budget deviation (loaded months)</div>
+      <div class="text-[11px] uppercase tracking-wider text-slate-500">Gross-worth vs budget (loaded)</div>
       <div id="kpi-delta" class="text-lg font-bold mt-1">—</div>
-      <div class="text-[11px] text-slate-500 mt-0.5">shifts this year's result; future years follow plan</div>
+      <div class="text-[11px] text-slate-500 mt-0.5">income + spend vs budget; shifts this year, then follows plan</div>
     </div>
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div class="text-[11px] uppercase tracking-wider text-slate-500">Incidental projects (triaged)</div>
@@ -95,7 +95,10 @@
         </div>
       </div>
       <p id="proj-subtitle" class="text-[11px] text-slate-500 mb-2"></p>
-      <div class="relative h-80"><canvas id="chart-projection"></canvas></div>
+      <div class="relative h-80">
+        <canvas id="chart-projection" class="absolute inset-0"></canvas>
+        <canvas id="chart-ytd" class="absolute inset-0 hidden"></canvas>
+      </div>
     </div>
     <div id="settings-panel" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 transition-shadow">
       <h2 class="font-semibold text-white">⚙ Settings <span class="text-[11px] font-normal text-slate-500">(projection, accounts &amp; thresholds — persisted in localStorage)</span></h2>
@@ -143,6 +146,19 @@
         Actuals: loaded months replace the budget for their own year; project spend is deducted when it happens and
         relieves the project's budget in its planned year. Threshold derivation: €5.323/mo ÷ 30,4 days ≈ €175/day × 1,15 ≈ <b>€200</b>.
       </p>
+    </div>
+  </section>
+
+  <!-- Budget framework -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h2 class="font-semibold text-white">Budget framework <span id="bf-year" class="text-[11px] font-normal text-slate-500"></span></h2>
+      <span class="text-[11px] text-slate-500 ml-auto">how the budgeted numbers roll up — and how the actuals so far compare</span>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-3">
+      <div id="bf-rollup" class="text-xs"></div>
+      <div id="bf-actuals" class="text-xs"></div>
+      <div id="bf-notes" class="text-[11px] text-slate-400 leading-relaxed"></div>
     </div>
   </section>
 
@@ -470,8 +486,13 @@ const SAMPLE_CSV = `01-05-2026,NL06ASNB8851233594,,,,,,EUR,767.37,EUR,-16.22,01-
    multiyear_projection.csv)
    ================================================================ */
 
-// Jaarbegroting: recurring outflow €63.336,80/yr = €5.323,49/mo
-const MONTHLY_RECURRING_BUDGET = 5323.49;
+// Jaarbegroting — recurring (month-to-month living), authoritative annual figures.
+// "Gross worth" = can we afford monthly living = income − spending.
+const RECURRING_INCOME_BUDGET = 101699;       // Jaarlijks terugkerend inkomen
+const RECURRING_SPEND_BUDGET = 63336.80;      // Jaarlijks terugkerend uitgaven
+const GROSS_WORTH_BUDGET = RECURRING_INCOME_BUDGET - RECURRING_SPEND_BUDGET; // €38.362,20
+const MONTHLY_RECURRING_BUDGET = RECURRING_SPEND_BUDGET / 12;  // €5.278,07
+const MONTHLY_INCOME_BUDGET = RECURRING_INCOME_BUDGET / 12;    // €8.474,92
 
 // Corrected MJP model (the sheet deducted the yearly investments only in 2026 —
 // confirmed as a sheet mistake): for every year
@@ -557,8 +578,9 @@ const DEFAULT_SETTINGS = {
   returnRate: 0,               // % return applied beyond 2031 only (the sheet assumes none)
   horizon: 15,                 // years
   savingsGrowth: 2,            // % growth of S_y beyond 2031 (MJP inflation factor)
-  monthlyBudget: MONTHLY_RECURRING_BUDGET,
-  threshold: 200,              // €5.323/mo ÷ 30,4 ≈ €175/day × 1,15 ≈ €200
+  monthlyBudget: MONTHLY_RECURRING_BUDGET,   // recurring spend budget / month
+  monthlyIncome: MONTHLY_INCOME_BUDGET,      // recurring income budget / month
+  threshold: 200,              // €5.278/mo ÷ 30,4 ≈ €174/day × 1,15 ≈ €200
   // Savings & investments
   savingsAccounts: ['NL16ASNB8851233608'],   // joint savings account(s) — counterparty IBAN
   investmentAccounts: [],                     // broker / investment account(s) — none in the data yet
@@ -593,6 +615,8 @@ if (!settings) {
 }
 // Backfill any settings introduced after this browser last saved
 for (const k in DEFAULT_SETTINGS) if (settings[k] === undefined) settings[k] = DEFAULT_SETTINGS[k];
+// Correct the old monthly-spend default (5323.49) to the authoritative €63.336,80/12
+if (Math.abs(settings.monthlyBudget - 5323.49) < 0.01) settings.monthlyBudget = MONTHLY_RECURRING_BUDGET;
 let transactions = loadJSON(LS_KEYS.tx) || [];
 let overrides = loadJSON(LS_KEYS.overrides) || {};   // id -> {cls, project}
 let projects = loadJSON(LS_KEYS.projects);
@@ -822,7 +846,7 @@ function effective(t) {
 function aggregate(txList) {
   const list = txList || transactions;
   const agg = {
-    months: new Set(), monthsByYear: {}, recurringSpendByYear: {}, recurringSpendByMonth: {}, recurringIncomeByMonth: {},
+    months: new Set(), monthsByYear: {}, recurringSpendByYear: {}, recurringSpendByMonth: {}, recurringIncomeByMonth: {}, recurringIncomeByYear: {},
     recurringIncome: 0, recurringSpend: 0,
     incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
     yearlyByYear: {}, yearlyByItem: {}, yearlyByItemYear: {}, yearlyTotal: 0, yearlyCount: 0,
@@ -895,6 +919,7 @@ function aggregate(txList) {
       if (t.amount > 0) {
         agg.recurringIncome += t.amount;
         agg.recurringIncomeByMonth[month] = (agg.recurringIncomeByMonth[month] || 0) + t.amount;
+        agg.recurringIncomeByYear[year] = (agg.recurringIncomeByYear[year] || 0) + t.amount;
       } else {
         agg.recurringSpend += -t.amount;
         agg.recurringSpendByYear[year] = (agg.recurringSpendByYear[year] || 0) - t.amount;
@@ -905,14 +930,19 @@ function aggregate(txList) {
   agg.monthCount = Math.max(agg.months.size, 1);
   agg.spendPerMonth = agg.recurringSpend / agg.monthCount;
   agg.incomePerMonth = agg.recurringIncome / agg.monthCount;
-  // Per year: positive = spent below budget over the loaded months of that year.
-  // Applied only to that year's result; future years follow the plan again.
-  agg.deviationByYear = {};
-  agg.deviationTotal = 0;
+  // Gross-worth deviation per year = how much better/worse the loaded months did
+  // than the recurring budget, on BOTH income and spend (income surplus + spend
+  // saving). Positive = ahead of plan. Future months follow the plan again.
+  agg.deviationByYear = {}; agg.deviationTotal = 0;
+  agg.spendDevByYear = {}; agg.incomeDevByYear = {};
   for (const y in agg.monthsByYear) {
-    const d = agg.monthsByYear[y].size * settings.monthlyBudget - (agg.recurringSpendByYear[y] || 0);
-    agg.deviationByYear[y] = d;
-    agg.deviationTotal += d;
+    const m = agg.monthsByYear[y].size;
+    const spendDev = m * settings.monthlyBudget - (agg.recurringSpendByYear[y] || 0); // +: spent less
+    const incomeDev = (agg.recurringIncomeByYear[y] || 0) - m * settings.monthlyIncome; // +: earned more
+    agg.spendDevByYear[y] = spendDev;
+    agg.incomeDevByYear[y] = incomeDev;
+    agg.deviationByYear[y] = spendDev + incomeDev;
+    agg.deviationTotal += agg.deviationByYear[y];
   }
   // Net savings: everything vs. only the regular (small, recurring) movements
   const s = agg.savings;
@@ -1073,7 +1103,25 @@ const chartProjection = new Chart(document.getElementById('chart-projection'), {
     plugins: { legend: { labels: { boxWidth: 14,
         filter: (item, data) => data.datasets[item.datasetIndex].data.length > 0 } },
       tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR0.format(c.parsed.y)}` } } },
-    scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(Math.abs(v) < 10000 ? 1 : 0) + 'k' } } }
+    scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } } }
+  }
+});
+
+// Year-to-date: cumulative recurring income & spend, actual vs budget (its own
+// chart so the net-worth view's styling never leaks). One-offs/incidentals excluded.
+const chartYtd = new Chart(document.getElementById('chart-ytd'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'Income — actual', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.10)', pointRadius: 2, tension: 0.15, fill: false },
+    { label: 'Income — budget', data: [], borderColor: 'rgba(52,211,153,.5)', borderDash: [6, 4], pointRadius: 0, tension: 0, fill: false },
+    { label: 'Spend — actual', data: [], borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,.10)', pointRadius: 2, tension: 0.15, fill: false },
+    { label: 'Spend — budget', data: [], borderColor: 'rgba(251,113,133,.5)', borderDash: [6, 4], pointRadius: 0, tension: 0, fill: false }
+  ]},
+  options: {
+    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { boxWidth: 14 } },
+      tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR0.format(c.parsed.y)}` } } },
+    scales: { y: { ticks: { callback: v => '€' + (v / 1000).toFixed(0) + 'k' } } }
   }
 });
 
@@ -1109,9 +1157,9 @@ function recomputeAll() {
   const aggView = aggregate(getFilteredTransactions());    // drives the time-filtered spend/earn views
   const periodTxt = activePeriodLabel();
 
-  // KPIs — income & spend respect the time filter
+  // KPIs — income & spend respect the time filter, compared to the monthly budget
   document.getElementById('kpi-income').textContent = fmtEUR.format(aggView.incomePerMonth);
-  document.getElementById('kpi-income-sub').textContent = periodTxt + ' · per month';
+  document.getElementById('kpi-income-sub').textContent = periodTxt + ' · budget ' + fmtEUR.format(settings.monthlyIncome);
   document.getElementById('kpi-spend').textContent = fmtEUR.format(aggView.spendPerMonth);
   document.getElementById('kpi-spend-sub').textContent = periodTxt + ' · budget ' + fmtEUR.format(settings.monthlyBudget);
 
@@ -1158,41 +1206,111 @@ function recomputeAll() {
   renderIncidentalTracker(aggFull);
   renderYearlyTracker(aggFull);
   renderSavings(aggFull);
+  renderBudgetFramework(aggFull, plan);
+}
+
+// The layered budget roll-up for the base year, plus how the loaded actuals
+// compare. Surfaces any gap between the user's stated components and the sheet's
+// operational result that drives the plan line.
+function renderBudgetFramework(agg, plan) {
+  const year = PROJECTION_START_YEAR; // 2026 — the year the budget figures describe
+  const income = RECURRING_INCOME_BUDGET;
+  const spend = RECURRING_SPEND_BUDGET;
+  const gross = income - spend;
+  const oneoffs = yearly.reduce((s, y) => s + (y.budget || 0), 0);
+  const incidentals = plannedIncidentalForYear(year);
+  const invest = investmentForYear(year);
+  const start = settings.startNetWorth;
+  const netResult = gross - oneoffs - incidentals;          // change in net worth (excl. investments)
+  const endComponents = start + netResult - invest;          // buffer at year-end from the components
+  const endPlan = plan[1];                                   // buffer at year-end from the sheet's op result
+  const recoGap = endPlan - endComponents;
+
+  const line = (label, val, opts = {}) => {
+    const c = opts.muted ? 'text-slate-400' : (val < 0 ? 'text-rose-300' : 'text-emerald-300');
+    return `<div class="flex justify-between py-1 ${opts.top ? 'border-t border-slate-700 mt-1 pt-1.5 font-semibold' : 'border-b border-slate-800/60'}">
+      <span class="${opts.bold ? 'text-slate-200 font-medium' : 'text-slate-400'}">${label}</span>
+      <span class="font-mono ${opts.plain ? 'text-slate-300' : c}">${opts.plain ? fmtEUR0.format(val) : signedEUR(val)}</span></div>`;
+  };
+  document.getElementById('bf-year').textContent = year + ' · budgeted';
+  document.getElementById('bf-rollup').innerHTML =
+    `<div class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Budgeted roll-up</div>` +
+    line('Recurring income', income) +
+    line('Recurring spending', -spend) +
+    line('= Gross worth (monthly living)', gross, { top: true, bold: true }) +
+    line('Yearly one-offs', -oneoffs) +
+    line('Incidentals (' + year + ')', -incidentals) +
+    line('= Net result', netResult, { top: true, bold: true }) +
+    line('Investments (to beleggen)', -invest) +
+    line('Net-worth start (31-12-' + (year - 1) + ')', start, { plain: true, muted: true }) +
+    line('= Buffer year-end', endComponents, { top: true, bold: true, plain: true });
+
+  // Actuals so far (loaded months of the base year)
+  const m = (agg.monthsByYear[year] && agg.monthsByYear[year].size) || 0;
+  const aInc = agg.recurringIncomeByYear[year] || 0;
+  const aSpend = agg.recurringSpendByYear[year] || 0;
+  const aGross = aInc - aSpend;
+  const expGross = gross * (m / 12);
+  document.getElementById('bf-actuals').innerHTML =
+    `<div class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Actuals so far · ${m} month(s)</div>` +
+    line('Income actual', aInc, { plain: true }) +
+    line('  vs budget pro-rata', income * (m / 12), { plain: true, muted: true }) +
+    line('Spending actual', -aSpend, { plain: true }) +
+    line('  vs budget pro-rata', -spend * (m / 12), { plain: true, muted: true }) +
+    line('= Gross worth actual', aGross, { top: true, bold: true }) +
+    line('  vs budget pro-rata', expGross, { plain: true, muted: true }) +
+    line('Ahead / behind', aGross - expGross, { top: true, bold: true });
+
+  document.getElementById('bf-notes').innerHTML =
+    `<div class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Reconciliation</div>` +
+    `<p>The plan line is driven by the sheet's <b>operational result</b> (€${fmtEUR0.format(OP_RESULT[year]).replace('€','').trim()}), ` +
+    `while your components give income − spend − one-offs = <b>${fmtEUR0.format(gross - oneoffs)}</b>. ` +
+    (Math.abs(recoGap) > 1
+      ? `That leaves a <b class="text-amber-300">${fmtEUR0.format(Math.abs(recoGap))}</b> gap between the component-based year-end buffer (${fmtEUR0.format(endComponents)}) and the plan's (${fmtEUR0.format(endPlan)}) — worth checking which figure in the sheet is off.</p>`
+      : `These reconcile.</p>`) +
+    `<p class="mt-1.5 text-slate-500">Gross worth answers “can we afford monthly living”. Net result also absorbs the one-offs and incidentals. The buffer excludes invested capital (toggle it on in the projection legend).</p>`;
 }
 
 function signedEUR(v) { return (v >= 0 ? '+' : '−') + fmtEUR0.format(Math.abs(v)); }
 
-// One chart, two views: the multi-year MJP projection, or year-to-date monthly
-// balance (recurring income − recurring spend) — actual vs the planned monthly
-// operational result. Savings/investments/incidentals are excluded by
-// construction; only 'recurring' bookings feed the YTD view.
+// Two views in one slot (separate canvases): the multi-year MJP net-worth
+// projection, or year-to-date cumulative recurring income & spend vs budget.
+// One-offs/incidentals are excluded from YTD — it measures month-to-month living.
 function updateProjectionChart(agg, plan, actual, total) {
   const view = settings.projView === 'ytd' ? 'ytd' : 'multi';
   document.querySelectorAll('.pv').forEach(b => b.classList.toggle('bg-slate-800', b.dataset.view === view));
-  const ds = chartProjection.data.datasets;
+  document.getElementById('chart-projection').classList.toggle('hidden', view === 'ytd');
+  document.getElementById('chart-ytd').classList.toggle('hidden', view !== 'ytd');
 
   if (view === 'ytd') {
     const years = Object.keys(agg.monthsByYear).map(Number);
     const year = years.length ? Math.max(...years) : new Date().getFullYear();
     const months = [...(agg.monthsByYear[year] || [])].sort();
-    const budMonthly = opResultForYear(year) / 12; // planned monthly net (earnings − spend)
-    const bud = [], act = [];
-    let sumBud = 0, sumAct = 0;
-    for (const m of months) {
-      const bal = (agg.recurringIncomeByMonth[m] || 0) - (agg.recurringSpendByMonth[m] || 0);
-      bud.push(budMonthly); act.push(bal);
-      sumBud += budMonthly; sumAct += bal;
-    }
-    chartProjection.data.labels = months.map(labelMonth);
-    ds[0].label = 'Budget balance / mo'; ds[0].data = bud;
-    ds[1].label = 'Actual balance / mo'; ds[1].data = act;
-    ds[2].data = []; ds[3].data = [];
-    const dev = sumAct - sumBud;
-    document.getElementById('proj-title').textContent = 'Year to date ' + year + ' — monthly balance vs budget';
+    const incActual = [], incBudget = [], spActual = [], spBudget = [];
+    let ci = 0, cs = 0;
+    months.forEach((m, i) => {
+      ci += agg.recurringIncomeByMonth[m] || 0;
+      cs += agg.recurringSpendByMonth[m] || 0;
+      incActual.push(ci); spActual.push(cs);
+      incBudget.push(settings.monthlyIncome * (i + 1));
+      spBudget.push(settings.monthlyBudget * (i + 1));
+    });
+    chartYtd.data.labels = months.map(labelMonth);
+    chartYtd.data.datasets[0].data = incActual;
+    chartYtd.data.datasets[1].data = incBudget;
+    chartYtd.data.datasets[2].data = spActual;
+    chartYtd.data.datasets[3].data = spBudget;
+    chartYtd.resize(); chartYtd.update();
+
+    const balAct = ci - cs, balBud = (settings.monthlyIncome - settings.monthlyBudget) * months.length;
+    const dev = balAct - balBud;
+    document.getElementById('proj-title').textContent = 'Year to date ' + year + ' — earnings vs spendings';
     document.getElementById('proj-subtitle').textContent =
-      months.length + ' loaded month(s) · recurring income − spend, one-offs excluded · YTD ' +
-      (dev >= 0 ? signedEUR(dev) + ' ahead of plan' : signedEUR(dev) + ' behind plan');
+      months.length + ' month(s) · gross worth (income − spend), one-offs & incidentals excluded · ' +
+      'balance ' + signedEUR(balAct) + ' vs budget ' + signedEUR(balBud) + ' → ' +
+      (dev >= 0 ? signedEUR(dev) + ' ahead' : signedEUR(dev) + ' behind');
   } else {
+    const ds = chartProjection.data.datasets;
     const labels = [];
     for (let i = 0; i <= settings.horizon; i++) labels.push(String(PROJECTION_START_YEAR + i));
     chartProjection.data.labels = labels;
@@ -1200,11 +1318,11 @@ function updateProjectionChart(agg, plan, actual, total) {
     ds[1].label = 'Actual (incl. loaded data)'; ds[1].data = actual;
     ds[2].data = labels.map(() => CRITICAL_THRESHOLD);
     ds[3].data = total;
+    chartProjection.resize(); chartProjection.update();
     document.getElementById('proj-title').textContent = 'Net worth projection — corrected MJP model';
     document.getElementById('proj-subtitle').textContent =
       'Op. resultaat − investeringen − incidentelen per jaar · click "Incl. invested capital" in the legend to add the beleggingspot';
   }
-  chartProjection.update();
 }
 
 function renderSavings(agg) {
