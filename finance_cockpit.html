@@ -1269,12 +1269,25 @@ function recomputeAll() {
   renderNetWorth(aggFull);
 }
 
+// Single source of truth for the household liquid buffer. Both the net-worth
+// panel and the Budget Framework's "net worth actual → of which buffer" line
+// read from here, so the two tiles can never drift apart. Anchored on the base
+// year (recurring income/spend for PROJECTION_START_YEAR) to match the
+// framework's per-year roll-up, then nets out one-offs, incidentals and the
+// injected capital that now lives in the broker pot.
+function computeBufferActual(agg) {
+  const year = PROJECTION_START_YEAR;
+  const aInc = agg.recurringIncomeByYear[year] || 0;
+  const aSpend = agg.recurringSpendByYear[year] || 0;
+  const aNetResult = (aInc - aSpend) - agg.yearlyTotal - agg.incidentalTotal;
+  return settings.startNetWorth + aNetResult - agg.invest.total;
+}
+
 // Complete net worth = household buffer (derived from imports) + personal savings
 // + investments at market value (both entered by hand). The buffer already
 // excludes injected cash, so the three pots are additive — no double-counting.
 function renderNetWorth(agg) {
-  const netChange = agg.recurringIncome - agg.recurringSpend - agg.yearlyTotal - agg.incidentalTotal;
-  const buffer = settings.startNetWorth + netChange - agg.invest.total; // liquid, injected cash sits in the broker pot
+  const buffer = computeBufferActual(agg); // identical to the framework's "of which buffer"
   const personal = settings.personalSavings || 0;
   const invVal = settings.investmentValue || 0;
   const total = buffer + personal + invVal;
@@ -1339,7 +1352,7 @@ function renderBudgetFramework(agg, plan) {
   const aInvested = agg.invest.total;
   const aNetResult = aGross - aOneoffs - aIncid;
   const netWorthActual = start + aNetResult;                 // total net worth right now (incl. invested)
-  const bufferActual = netWorthActual - aInvested;           // liquid buffer right now
+  const bufferActual = computeBufferActual(agg);             // shared helper → matches the net-worth panel exactly
   document.getElementById('bf-actuals').innerHTML =
     `<div class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Actuals so far · ${m} month(s)</div>` +
     line('Income actual', aInc) +
