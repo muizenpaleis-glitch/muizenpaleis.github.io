@@ -39,6 +39,28 @@ def host_for(country: str) -> str:
     return f"https://storefront-prod.{country.lower()}.picnicinternational.com"
 
 
+def load_dotenv():
+    """Load KEY=VALUE pairs from a .env file next to this script (or the cwd)
+    into the environment, without overwriting anything already set. Lets you put
+    a complex password in a file you can see and edit, instead of typing it
+    blind. The .env file is git-ignored."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, ".env"), os.path.join(os.getcwd(), ".env")):
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+
+
+
 def _request(url, token=None, payload=None, method=None):
     data = None
     headers = {
@@ -251,6 +273,7 @@ def main():
         selftest()
         return
 
+    load_dotenv()
     email = os.environ.get("PICNIC_USERNAME")
     password = os.environ.get("PICNIC_PASSWORD")
     if not email:

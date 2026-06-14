@@ -22,14 +22,24 @@ Needs Python 3 (no third-party packages — standard library only).
 ```bash
 cd picnic
 
-# option A: environment variables
+# RECOMMENDED, esp. for a complex password: a .env file you can see and edit
+cp .env.example .env        # then open .env and paste your credentials
+python3 picnic_export.py    # the script loads .env automatically
+
+# alternative: environment variables (e.g. Codespaces secrets)
 export PICNIC_USERNAME="you@example.com"
 export PICNIC_PASSWORD="your-password"
 python3 picnic_export.py
 
-# option B: just run it and answer the prompts (password is hidden)
+# alternative: just run it and answer the prompts
+#   NOTE: the password prompt is hidden — you'll see NOTHING as you type
+#   (no dots/asterisks). It is still recording. Type it and press Enter.
 python3 picnic_export.py
 ```
+
+The `.env` file is git-ignored, so your credentials never get committed. Because
+you edit it in your text editor, you can paste and verify a complex password
+instead of typing it blind at a hidden prompt.
 
 This writes `picnic_export.json`. Options:
 
