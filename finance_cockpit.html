@@ -216,7 +216,7 @@
         <button id="btn-edit-cats" class="text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700">Edit budgets</button>
         <span id="cb-summary" class="text-[11px] text-slate-500 ml-auto"></span>
       </div>
-      <p class="text-[11px] text-slate-500 mb-4">Net recurring spend per bank category for the selected month, against a monthly budget. Categories without a set budget compare against your <b>loaded-month average</b> — so you can spot whether e.g. <i>Boodschappen</i> is running hot. Use <i>Edit budgets</i> to track against a real target instead.</p>
+      <p class="text-[11px] text-slate-500 mb-4">Net recurring spend per bank category for the selected month, against your monthly budget. Budgets are pre-filled from your <b>Jaarbegroting</b> (e.g. Boodschappen €500) and mapped onto the bank's categories; edit any of them with <i>Edit budgets</i>. A category with no budget falls back to your <b>loaded-month average</b>.</p>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="cb-tracker"></div>
       <div id="cb-editor" class="hidden mt-4 pt-4 border-t border-slate-800 space-y-2"></div>
     </div>
@@ -679,6 +679,33 @@ const DEFAULT_SETTINGS = {
 };
 
 const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2', yearly: 'fc.yearly.v1' };
+
+// Monthly budget per BANK category, mapped from the Jaarbegroting (the budget
+// sheet). The sheet is organised by household categories that are finer-grained
+// than the bank's, so several budget lines roll up into one bank category. These
+// are the out-of-the-box defaults; any per-category edit in the UI overrides
+// the matching entry here. Vakantie is omitted — it's tracked as a yearly item,
+// not monthly. Each amount is €/month.
+const DEFAULT_CATEGORY_BUDGETS = {
+  'Boodschappen': 500.00,                 // sheet: Boodschappen €500
+  'Eten & drinken': 210.00,               // Bars 25 + Restaurants 150 + Lunch 35
+  'Huur & hypotheek': 2174.97,            // Hypotheek
+  'Gas water & licht': 285.73,            // Energie 260 + Water 25,73
+  'Internet TV & Bellen': 50.45,          // Internet 25 + Spotify 17,99 + NLZiet 7,46
+  'Verzekeringen': 149.95,                // TAF+Allianz+Woonhuis+Aansprakelijkheid+Inboedel+Auto+Reis
+  'Vervoer': 100.00,                      // Vervoer 50 + Parkeren 12,50 + Wegenbelasting 22 + OV 15,50
+  'Kinderen': 682.49,                     // Kinderopvang 524,16 + babykosten 158,33
+  'Huishouden & elektronica': 183.99,     // Huis & Tuin 43,99 + Schoonmaak 140
+  'Hobby sport & vrije tijd': 91.00,      // Kicksfit 45 + Sportschool 46
+  'Zak- & kleedgeld': 500.00,             // Zak- & kleedgeld
+  'Verzorging & gezondheid': 29.17,       // Medisch 8,33 + Cosmetica 8,33 + Apotheek 12,50
+  'Kleding': 83.33,                       // Online winkelen (best-fit)
+  'Cadeaus': 75.00,                       // Cadeau's
+  'Goede doelen': 125.00,                 // Goede doelen
+  'Lening': 148.06,                       // Duurzaamheidslening 64,73 + Lendahand 83,33
+  'Klussen & onderhoud': 35.00,           // Overig huis en tuin
+  'Bankkosten': 3.65                      // ASN
+};
 
 // v1→v2 project rename map: the old coarse buckets became the sheet's exact items
 const PROJECT_RENAMES_V2 = {
@@ -1821,9 +1848,20 @@ function renderYearlyEditor() {
     `<button id="btn-add-yearly" class="text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg">+ Add yearly item</button>`;
 }
 
-// Per-category monthly spend vs budget for one loaded month. Where no explicit
-// budget is set, we compare against the loaded-month average for that category,
-// so every category is judged from day one ("is boodschappen running hot?").
+// Resolve the budget for a bank category: a user edit wins, then the
+// Jaarbegroting default, then (if neither) the loaded-month average so the
+// category is still judged against something. `basis` says which one was used.
+function catBudgetInfo(cat, agg) {
+  const avg = (agg.recurringSpendByCat[cat] || 0) / agg.monthCount;
+  const ovr = settings.categoryBudgets || {};
+  if (Object.prototype.hasOwnProperty.call(ovr, cat)) return { budget: ovr[cat], basis: 'budget', avg };
+  if (cat in DEFAULT_CATEGORY_BUDGETS) return { budget: DEFAULT_CATEGORY_BUDGETS[cat], basis: 'budget', avg };
+  return { budget: avg, basis: 'avg', avg };
+}
+
+// Per-category monthly spend vs budget for one loaded month. Budgets come from
+// the Jaarbegroting by default (overridable per category); categories with no
+// budget fall back to the loaded-month average ("is boodschappen running hot?").
 function renderCategoryBudgets(agg) {
   const months = Object.keys(agg.recurringSpendByMonth).sort();
   const headline = document.getElementById('cb-headline');
@@ -1838,14 +1876,11 @@ function renderCategoryBudgets(agg) {
   document.getElementById('cb-month-filter').innerHTML =
     months.map(m => `<button data-month="${m}" class="cm px-2.5 py-1 rounded-lg border border-slate-700 ${m === sel ? 'bg-slate-800' : ''}">${m}</button>`).join('');
 
-  const budgets = settings.categoryBudgets || {};
-  const cats = [...new Set([...Object.keys(agg.recurringSpendByCat), ...Object.keys(budgets)])]
+  const cats = [...new Set([...Object.keys(agg.recurringSpendByCat), ...Object.keys(DEFAULT_CATEGORY_BUDGETS), ...Object.keys(settings.categoryBudgets || {})])]
     .map(c => {
-      const avg = (agg.recurringSpendByCat[c] || 0) / agg.monthCount;
-      const hasBudget = budgets[c] != null && budgets[c] !== '';
-      const budget = hasBudget ? budgets[c] : avg;
+      const info = catBudgetInfo(c, agg);
       const actual = (agg.recurringSpendByCatMonth[c] && agg.recurringSpendByCatMonth[c][sel]) || 0;
-      return { name: c, avg, hasBudget, budget, actual };
+      return { name: c, avg: info.avg, basis: info.basis, budget: info.budget, actual };
     })
     .filter(c => c.actual > 0 || c.budget > 0)
     .sort((a, b) => b.actual - a.actual);
@@ -1857,7 +1892,7 @@ function renderCategoryBudgets(agg) {
     const over = c.budget > 0 && c.actual > c.budget * 1.05;
     const barColor = over ? 'bg-rose-500' : pct > 85 ? 'bg-amber-500' : 'bg-emerald-500';
     const remaining = c.budget - c.actual;
-    const basis = c.hasBudget ? 'budget' : 'avg';
+    const basis = c.basis;
     return `
       <div>
         <div class="flex justify-between items-baseline text-xs mb-1">
@@ -1885,10 +1920,12 @@ function renderCategoryBudgets(agg) {
 
 function renderCategoryEditor(agg) {
   const budgets = settings.categoryBudgets || {};
-  const cats = [...new Set([...Object.keys(agg.recurringSpendByCat), ...Object.keys(budgets)])].sort();
+  const cats = [...new Set([...Object.keys(agg.recurringSpendByCat), ...Object.keys(DEFAULT_CATEGORY_BUDGETS), ...Object.keys(budgets)])].sort();
   document.getElementById('cb-editor').innerHTML = cats.map(c => {
     const avg = (agg.recurringSpendByCat[c] || 0) / agg.monthCount;
-    const val = budgets[c] != null && budgets[c] !== '' ? budgets[c] : '';
+    // Show the effective budget: a user override, else the Jaarbegroting default, else blank (→ avg).
+    const val = Object.prototype.hasOwnProperty.call(budgets, c) ? budgets[c]
+      : (c in DEFAULT_CATEGORY_BUDGETS ? DEFAULT_CATEGORY_BUDGETS[c] : '');
     return `
       <div class="flex items-center gap-2" data-cat="${esc(c)}">
         <span class="flex-1 text-sm text-slate-200">${esc(c)}</span>
@@ -1898,7 +1935,7 @@ function renderCategoryEditor(agg) {
           <input type="number" step="25" min="0" class="cb-budget w-32 bg-slate-800 border border-slate-700 rounded-lg pl-5 pr-2 py-1.5 text-sm text-slate-100" value="${val}" placeholder="${avg.toFixed(0)}">
         </div>
       </div>`;
-  }).join('') + `<p class="text-[11px] text-slate-500 pt-1">Leave a field blank to fall back to the loaded-month average.</p>`;
+  }).join('') + `<p class="text-[11px] text-slate-500 pt-1">Pre-filled from the Jaarbegroting. Blank a field to fall back to its budget default, or the loaded-month average if none.</p>`;
 }
 
 function renderProjects() {
