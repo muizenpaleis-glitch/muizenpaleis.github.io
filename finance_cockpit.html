@@ -203,6 +203,25 @@
     </div>
   </section>
 
+  <!-- Monthly category budgets -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <h2 class="font-semibold text-white">Monthly category budgets <span class="text-[11px] font-normal text-slate-500">(monthly recurring only)</span></h2>
+      <button class="disc-btn ml-auto text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700" data-target="cb-details" data-key="catBudExpanded">Show categories <span class="caret">▾</span></button>
+    </div>
+    <div id="cb-headline"></div>
+    <div id="cb-details" class="hidden mt-4 pt-3 border-t border-slate-800">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <div id="cb-month-filter" class="flex flex-wrap gap-1 text-xs"></div>
+        <button id="btn-edit-cats" class="text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700">Edit budgets</button>
+        <span id="cb-summary" class="text-[11px] text-slate-500 ml-auto"></span>
+      </div>
+      <p class="text-[11px] text-slate-500 mb-4">Net recurring spend per bank category for the selected month, against a monthly budget. Categories without a set budget compare against your <b>loaded-month average</b> — so you can spot whether e.g. <i>Boodschappen</i> is running hot. Use <i>Edit budgets</i> to track against a real target instead.</p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4" id="cb-tracker"></div>
+      <div id="cb-editor" class="hidden mt-4 pt-4 border-t border-slate-800 space-y-2"></div>
+    </div>
+  </section>
+
   <!-- Incidental budget tracker -->
   <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
     <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -652,7 +671,9 @@ const DEFAULT_SETTINGS = {
   projView: 'multi',                          // projection chart view: 'multi' | 'ytd'
   incYear: 'all',                             // incidental tracker year filter: 'all' | a year
   yrYear: 'all',                              // yearly tracker year filter: 'all' | a year
-  incExpanded: false, yrExpanded: false, savExpanded: false, // collapsible tracker detail state
+  catMonth: 'latest',                         // category-budget tracker month: 'latest' | a 'YYYY-MM'
+  categoryBudgets: {},                        // per bank-category monthly budget; unset → compare vs loaded-month average
+  incExpanded: false, yrExpanded: false, savExpanded: false, catBudExpanded: false, // collapsible tracker detail state
   personalSavings: 0,                         // manual: personal savings outside the household account
   investmentValue: 0                          // manual: current market value of household investments
 };
@@ -919,7 +940,7 @@ function aggregate(txList) {
     incidentalNetByYear: {}, incidentalByProject: {}, incidentalTotal: 0, incidentalCount: 0,
     yearlyByYear: {}, yearlyByItem: {}, yearlyByItemYear: {}, yearlyTotal: 0, yearlyCount: 0,
     excludedTotal: 0,
-    spendByCat: {}, recurringSpendByCat: {}, flowByMonth: {},
+    spendByCat: {}, recurringSpendByCat: {}, recurringSpendByCatMonth: {}, flowByMonth: {},
     savings: { byMonth: {}, deposit: 0, withdraw: 0, depositInc: 0, withdrawInc: 0, count: 0, items: [] },
     invest: { byYear: {}, total: 0, count: 0, items: [] }
   };
@@ -996,6 +1017,8 @@ function aggregate(txList) {
       // Net spend per category: spend adds, in-category refunds/income subtract,
       // so the doughnut matches the net treatment used by yearly & incidentals.
       agg.recurringSpendByCat[e.bankCat] = (agg.recurringSpendByCat[e.bankCat] || 0) - t.amount;
+      const cm = agg.recurringSpendByCatMonth[e.bankCat] || (agg.recurringSpendByCatMonth[e.bankCat] = {});
+      cm[month] = (cm[month] || 0) - t.amount; // net spend for this category in this month
     }
   }
   agg.monthCount = Math.max(agg.months.size, 1);
@@ -1266,6 +1289,7 @@ function recomputeAll() {
   chartCashflow.data.datasets[2].data = months.map(m => (aggView.recurringIncomeByMonth[m] || 0) - (aggView.recurringSpendByMonth[m] || 0));
   chartCashflow.update();
 
+  renderCategoryBudgets(aggFull);
   renderIncidentalTracker(aggFull);
   renderYearlyTracker(aggFull);
   renderSavings(aggFull);
@@ -1797,6 +1821,86 @@ function renderYearlyEditor() {
     `<button id="btn-add-yearly" class="text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg">+ Add yearly item</button>`;
 }
 
+// Per-category monthly spend vs budget for one loaded month. Where no explicit
+// budget is set, we compare against the loaded-month average for that category,
+// so every category is judged from day one ("is boodschappen running hot?").
+function renderCategoryBudgets(agg) {
+  const months = Object.keys(agg.recurringSpendByMonth).sort();
+  const headline = document.getElementById('cb-headline');
+  const tracker = document.getElementById('cb-tracker');
+  if (!months.length) {
+    headline.innerHTML = '<p class="text-sm text-slate-500">Load transactions to track category spend.</p>';
+    tracker.innerHTML = ''; document.getElementById('cb-month-filter').innerHTML = ''; document.getElementById('cb-summary').textContent = '';
+    return;
+  }
+  const latest = months[months.length - 1];
+  const sel = settings.catMonth && months.includes(settings.catMonth) ? settings.catMonth : latest;
+  document.getElementById('cb-month-filter').innerHTML =
+    months.map(m => `<button data-month="${m}" class="cm px-2.5 py-1 rounded-lg border border-slate-700 ${m === sel ? 'bg-slate-800' : ''}">${m}</button>`).join('');
+
+  const budgets = settings.categoryBudgets || {};
+  const cats = [...new Set([...Object.keys(agg.recurringSpendByCat), ...Object.keys(budgets)])]
+    .map(c => {
+      const avg = (agg.recurringSpendByCat[c] || 0) / agg.monthCount;
+      const hasBudget = budgets[c] != null && budgets[c] !== '';
+      const budget = hasBudget ? budgets[c] : avg;
+      const actual = (agg.recurringSpendByCatMonth[c] && agg.recurringSpendByCatMonth[c][sel]) || 0;
+      return { name: c, avg, hasBudget, budget, actual };
+    })
+    .filter(c => c.actual > 0 || c.budget > 0)
+    .sort((a, b) => b.actual - a.actual);
+
+  let totBudget = 0, totActual = 0;
+  const rows = cats.map(c => {
+    totBudget += c.budget; totActual += c.actual;
+    const pct = c.budget > 0 ? c.actual / c.budget * 100 : (c.actual > 0 ? 100 : 0);
+    const over = c.budget > 0 && c.actual > c.budget * 1.05;
+    const barColor = over ? 'bg-rose-500' : pct > 85 ? 'bg-amber-500' : 'bg-emerald-500';
+    const remaining = c.budget - c.actual;
+    const basis = c.hasBudget ? 'budget' : 'avg';
+    return `
+      <div>
+        <div class="flex justify-between items-baseline text-xs mb-1">
+          <span class="font-medium text-slate-200">${esc(c.name)}</span>
+          <span class="text-slate-400">${fmtEUR0.format(c.actual)} <span class="text-slate-600">/ ${fmtEUR0.format(c.budget)}</span>
+            <span class="${over ? 'text-rose-400' : 'text-slate-500'} ml-1">${c.budget > 0 ? pct.toFixed(0) + '%' : '—'}</span></span>
+        </div>
+        <div class="h-2.5 rounded-full bg-slate-800 overflow-hidden">
+          <div class="h-full ${barColor} transition-all" style="width:${Math.min(100, pct).toFixed(1)}%"></div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-0.5 text-right">${remaining >= 0 ? fmtEUR0.format(remaining) + ' left' : fmtEUR0.format(-remaining) + ' over'} · vs ${basis} ${fmtEUR0.format(c.budget)}</div>
+      </div>`;
+  });
+  tracker.innerHTML = rows.join('') || '<p class="text-sm text-slate-500">No recurring spend in this month.</p>';
+
+  const vs = totActual - totBudget;
+  document.getElementById('cb-summary').textContent =
+    `${sel}: ${fmtEUR0.format(totActual)} spent of ${fmtEUR0.format(totBudget)} ` +
+    (vs <= 0 ? fmtEUR0.format(-vs) + ' under' : fmtEUR0.format(vs) + ' over');
+  const sub = (vs <= 0 ? fmtEUR0.format(-vs) + ' under budget this month.' : '<span class="text-rose-400">' + fmtEUR0.format(vs) + ' over budget this month.</span>')
+    + ' Categories without a set budget compare against your loaded-month average.';
+  headline.innerHTML = trackerHeadline(sel + ' · spend vs monthly budget', totActual, totBudget, 'bg-emerald-500', sub);
+  renderCategoryEditor(agg);
+}
+
+function renderCategoryEditor(agg) {
+  const budgets = settings.categoryBudgets || {};
+  const cats = [...new Set([...Object.keys(agg.recurringSpendByCat), ...Object.keys(budgets)])].sort();
+  document.getElementById('cb-editor').innerHTML = cats.map(c => {
+    const avg = (agg.recurringSpendByCat[c] || 0) / agg.monthCount;
+    const val = budgets[c] != null && budgets[c] !== '' ? budgets[c] : '';
+    return `
+      <div class="flex items-center gap-2" data-cat="${esc(c)}">
+        <span class="flex-1 text-sm text-slate-200">${esc(c)}</span>
+        <span class="text-[11px] text-slate-500">avg ${fmtEUR0.format(avg)}/mo</span>
+        <div class="relative">
+          <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">€</span>
+          <input type="number" step="25" min="0" class="cb-budget w-32 bg-slate-800 border border-slate-700 rounded-lg pl-5 pr-2 py-1.5 text-sm text-slate-100" value="${val}" placeholder="${avg.toFixed(0)}">
+        </div>
+      </div>`;
+  }).join('') + `<p class="text-[11px] text-slate-500 pt-1">Leave a field blank to fall back to the loaded-month average.</p>`;
+}
+
 function renderProjects() {
   document.getElementById('proj-list').innerHTML = projects.map((p, i) => `
     <div class="flex items-center gap-2" data-idx="${i}">
@@ -2221,6 +2325,32 @@ document.getElementById('agent-form').addEventListener('submit', (ev) => {
 document.getElementById('agent-suggest').addEventListener('click', (ev) => {
   const b = ev.target.closest('.ag-sugg');
   if (b) agentAsk(b.textContent);
+});
+
+// Category budgets: month picker
+document.getElementById('cb-month-filter').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.cm');
+  if (!b) return;
+  settings.catMonth = b.dataset.month;
+  saveJSON(LS_KEYS.settings, settings);
+  recomputeAll();
+});
+// Category budgets: show/hide the budget editor
+document.getElementById('btn-edit-cats').addEventListener('click', () => {
+  document.getElementById('cb-editor').classList.toggle('hidden');
+});
+// Category budgets: set / clear a per-category monthly budget
+document.getElementById('cb-editor').addEventListener('change', (ev) => {
+  if (!ev.target.classList.contains('cb-budget')) return;
+  const row = ev.target.closest('[data-cat]');
+  if (!row) return;
+  const cat = row.dataset.cat;
+  settings.categoryBudgets = settings.categoryBudgets || {};
+  const v = parseFloat(ev.target.value);
+  if (ev.target.value !== '' && isFinite(v) && v >= 0) settings.categoryBudgets[cat] = v;
+  else delete settings.categoryBudgets[cat];
+  saveJSON(LS_KEYS.settings, settings);
+  recomputeAll();
 });
 
 // Yearly tracker: year filter
