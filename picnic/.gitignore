@@ -2,3 +2,7 @@
 .env
 *.json
 picnic_export.json
+
+# Python build artifacts
+__pycache__/
+*.pyc
