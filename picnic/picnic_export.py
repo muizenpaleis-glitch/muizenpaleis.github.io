@@ -32,7 +32,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 DEFAULT_API_VERSION = "15"
-CLIENT_ID = 30100  # the storefront client id the app reports
+CLIENT_ID = 30100        # app identifier used in the x-picnic-agent header
+LOGIN_CLIENT_ID = 1      # client_id field in the login payload
 
 
 def host_for(country: str) -> str:
@@ -88,7 +89,7 @@ def _request(url, token=None, payload=None, method=None):
 
 def login(base, email, password):
     secret = hashlib.md5(password.encode("utf-8")).hexdigest()
-    payload = {"key": email, "secret": secret, "client_id": CLIENT_ID}
+    payload = {"key": email, "secret": secret, "client_id": LOGIN_CLIENT_ID}
     body, headers = _request(f"{base}/user/login", payload=payload)
     token = headers.get("x-picnic-auth") or headers.get("X-Picnic-Auth")
     if not token:
