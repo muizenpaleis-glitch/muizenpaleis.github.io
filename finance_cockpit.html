@@ -992,8 +992,10 @@ function aggregate(txList) {
         agg.recurringSpend += -t.amount;
         agg.recurringSpendByYear[year] = (agg.recurringSpendByYear[year] || 0) - t.amount;
         agg.recurringSpendByMonth[month] = (agg.recurringSpendByMonth[month] || 0) - t.amount;
-        agg.recurringSpendByCat[e.bankCat] = (agg.recurringSpendByCat[e.bankCat] || 0) - t.amount;
       }
+      // Net spend per category: spend adds, in-category refunds/income subtract,
+      // so the doughnut matches the net treatment used by yearly & incidentals.
+      agg.recurringSpendByCat[e.bankCat] = (agg.recurringSpendByCat[e.bankCat] || 0) - t.amount;
     }
   }
   agg.monthCount = Math.max(agg.months.size, 1);
@@ -1245,8 +1247,10 @@ function recomputeAll() {
   document.getElementById('kpi-horizon-sub').textContent =
     (diff >= 0 ? '+' : '') + fmtEUR0.format(diff) + ' vs plan in ' + (PROJECTION_START_YEAR + settings.horizon);
 
-  // Category doughnut (filtered, monthly-recurring spend only, top 9 + rest)
-  const cats = Object.entries(aggView.recurringSpendByCat).sort((a, b) => b[1] - a[1]);
+  // Category doughnut (filtered, monthly-recurring NET spend, top 9 + rest).
+  // Categories that net positive (more refunds than spend) are dropped from the
+  // slices — a doughnut can't draw a negative wedge — but stay in the totals.
+  const cats = Object.entries(aggView.recurringSpendByCat).filter(c => c[1] > 0).sort((a, b) => b[1] - a[1]);
   const top = cats.slice(0, 9);
   const rest = cats.slice(9).reduce((s, c) => s + c[1], 0);
   if (rest > 0) top.push(['Rest', rest]);
