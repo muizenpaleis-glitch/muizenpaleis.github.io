@@ -258,6 +258,35 @@
     </div>
   </section>
 
+  <!-- Picnic grocery breakdown -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <h2 class="font-semibold text-white">Picnic grocery breakdown</h2>
+      <span id="pc-summary" class="text-[11px] text-slate-500"></span>
+      <div class="ml-auto flex items-center gap-2">
+        <label class="text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg cursor-pointer">Load Picnic export
+          <input id="pc-file" type="file" accept="application/json,.json" class="hidden">
+        </label>
+        <button class="disc-btn text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700" data-target="pc-details" data-key="pcExpanded">Show items <span class="caret">▾</span></button>
+      </div>
+    </div>
+    <div id="pc-headline"></div>
+    <div id="pc-details" class="hidden mt-4 pt-3 border-t border-slate-800">
+      <p class="text-[11px] text-slate-500 mb-4">Item-level detail from your Picnic orders. Generate the JSON with the local <span class="font-mono text-slate-400">picnic/picnic_export.py</span> script (see its README — Picnic can't be reached from the browser), then load it here. Stored only in this browser.</p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
+        <div>
+          <div class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Biggest spend (top 15)</div>
+          <div id="pc-by-spend" class="space-y-2"></div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Most ordered, by units (top 15)</div>
+          <div id="pc-by-qty" class="space-y-2"></div>
+        </div>
+      </div>
+      <div id="pc-reco" class="text-[11px] text-slate-400 mt-4 pt-3 border-t border-slate-800"></div>
+    </div>
+  </section>
+
   <!-- Savings & investments -->
   <section class="bg-slate-900 border border-slate-800 rounded-xl p-4">
     <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -673,12 +702,12 @@ const DEFAULT_SETTINGS = {
   yrYear: 'all',                              // yearly tracker year filter: 'all' | a year
   catMonth: 'latest',                         // category-budget tracker month: 'latest' | a 'YYYY-MM'
   categoryBudgets: {},                        // per bank-category monthly budget; unset → compare vs loaded-month average
-  incExpanded: false, yrExpanded: false, savExpanded: false, catBudExpanded: false, // collapsible tracker detail state
+  incExpanded: false, yrExpanded: false, savExpanded: false, catBudExpanded: false, pcExpanded: false, // collapsible tracker detail state
   personalSavings: 0,                         // manual: personal savings outside the household account
   investmentValue: 0                          // manual: current market value of household investments
 };
 
-const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2', yearly: 'fc.yearly.v1' };
+const LS_KEYS = { settings: 'fc.settings.v2', tx: 'fc.transactions.v1', overrides: 'fc.overrides.v1', projects: 'fc.projects.v2', yearly: 'fc.yearly.v1', picnic: 'fc.picnic.v1' };
 
 // Monthly budget per BANK category, mapped from the Jaarbegroting (the budget
 // sheet). The sheet is organised by household categories that are finer-grained
@@ -758,6 +787,7 @@ for (const p of projects) {
   if (p.done === undefined) p.done = false;
 }
 let yearly = loadJSON(LS_KEYS.yearly) || DEFAULT_YEARLY.map(y => ({ ...y }));
+let picnicData = loadJSON(LS_KEYS.picnic) || null;   // imported Picnic order breakdown
 let lastAgg = null;   // most recent full aggregate, for the Ask-your-numbers analyst
 let activeFilter = 'all';
 let catFilter = settings.catFilter ? new Set(settings.catFilter) : null; // null = all categories shown
@@ -1316,6 +1346,7 @@ function recomputeAll() {
   chartCashflow.update();
 
   renderCategoryBudgets(aggFull);
+  renderPicnic();
   renderIncidentalTracker(aggFull);
   renderYearlyTracker(aggFull);
   renderSavings(aggFull);
@@ -1937,6 +1968,80 @@ function renderCategoryEditor(agg) {
   }).join('') + `<p class="text-[11px] text-slate-500 pt-1">Pre-filled from the Jaarbegroting. Blank a field to fall back to its budget default, or the loaded-month average if none.</p>`;
 }
 
+// Picnic grocery breakdown — driven by the JSON the local exporter produces.
+function renderPicnic() {
+  const headline = document.getElementById('pc-headline');
+  const summary = document.getElementById('pc-summary');
+  if (!picnicData || !Array.isArray(picnicData.items) || !picnicData.items.length) {
+    summary.textContent = 'not loaded';
+    headline.innerHTML = '<p class="text-sm text-slate-500">No Picnic data yet. Run <span class="font-mono text-slate-400">picnic/picnic_export.py</span> locally, then use <b>Load Picnic export</b>.</p>';
+    document.getElementById('pc-by-spend').innerHTML = '';
+    document.getElementById('pc-by-qty').innerHTML = '';
+    document.getElementById('pc-reco').innerHTML = '';
+    return;
+  }
+  const t = picnicData.totals || {};
+  const range = (t.from && t.to) ? ` · ${t.from} → ${t.to}` : '';
+  summary.textContent = `${fmtEUR0.format(t.spend_eur || 0)} · ${t.deliveries || 0} orders`;
+  const avg = (t.deliveries ? (t.spend_eur || 0) / t.deliveries : 0);
+  headline.innerHTML =
+    `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+      ${pcTile('Total spend', fmtEUR0.format(t.spend_eur || 0))}
+      ${pcTile('Deliveries', String(t.deliveries || 0))}
+      ${pcTile('Avg / order', fmtEUR0.format(avg))}
+      ${pcTile('Distinct items', String(t.distinct_items || 0))}
+    </div>
+    <div class="text-[11px] text-slate-500 mt-2">Imported ${esc((picnicData.generated_at || '').slice(0, 10))}${range}</div>`;
+
+  const bySpend = [...picnicData.items].sort((a, b) => b.spend_eur - a.spend_eur).slice(0, 15);
+  const byQty = [...picnicData.items].sort((a, b) => b.qty - a.qty).slice(0, 15);
+  const maxSpend = bySpend.length ? bySpend[0].spend_eur : 1;
+  const maxQty = byQty.length ? byQty[0].qty : 1;
+
+  const spendRow = it => pcBar(it.name, fmtEUR0.format(it.spend_eur),
+    `${it.qty}× · ${esc(it.unit_quantity || '')}`, (it.spend_eur / maxSpend) * 100, 'bg-emerald-500');
+  const qtyRow = it => pcBar(it.name, `${it.qty}×`,
+    `${fmtEUR0.format(it.spend_eur)} · ${it.orders} orders`, (it.qty / maxQty) * 100, 'bg-cyan-500');
+  document.getElementById('pc-by-spend').innerHTML = bySpend.map(spendRow).join('');
+  document.getElementById('pc-by-qty').innerHTML = byQty.map(qtyRow).join('');
+
+  // Reconcile against the bank's own Picnic transactions (non-excluded spend).
+  let bankPicnic = 0;
+  for (const tx of transactions) {
+    if (effective(tx).cls === 'exclude' || tx.amount >= 0) continue;
+    if (/picnic/i.test((tx.name || '') + ' ' + (tx.desc || ''))) bankPicnic += -tx.amount;
+  }
+  if (bankPicnic > 0) {
+    const gap = (t.spend_eur || 0) - bankPicnic;
+    document.getElementById('pc-reco').innerHTML =
+      `Bank shows <b>${fmtEUR0.format(bankPicnic)}</b> paid to Picnic in your loaded transactions; this export totals <b>${fmtEUR0.format(t.spend_eur || 0)}</b>. ` +
+      (Math.abs(gap) < Math.max(25, bankPicnic * 0.05)
+        ? 'These line up well.'
+        : `<span class="text-amber-300">${fmtEUR0.format(Math.abs(gap))} ${gap > 0 ? 'more in the export' : 'more on the bank'}</span> — likely because the export covers a different date range than the months you've loaded.`);
+  } else {
+    document.getElementById('pc-reco').innerHTML = 'No Picnic transactions found in the loaded bank data to reconcile against.';
+  }
+}
+
+function pcTile(label, val) {
+  return `<div class="bg-slate-800/40 border border-slate-800 rounded-lg py-2">
+    <div class="text-lg font-bold text-emerald-300">${val}</div>
+    <div class="text-[11px] text-slate-500">${label}</div></div>`;
+}
+
+function pcBar(name, value, sub, pct, color) {
+  return `<div>
+    <div class="flex justify-between items-baseline text-xs mb-1 gap-2">
+      <span class="font-medium text-slate-200 truncate" title="${esc(name)}">${esc(name)}</span>
+      <span class="text-slate-300 whitespace-nowrap">${value}</span>
+    </div>
+    <div class="h-2 rounded-full bg-slate-800 overflow-hidden">
+      <div class="h-full ${color} transition-all" style="width:${Math.max(2, Math.min(100, pct)).toFixed(1)}%"></div>
+    </div>
+    <div class="text-[10px] text-slate-500 mt-0.5">${sub}</div>
+  </div>`;
+}
+
 function renderProjects() {
   document.getElementById('proj-list').innerHTML = projects.map((p, i) => `
     <div class="flex items-center gap-2" data-idx="${i}">
@@ -2387,6 +2492,28 @@ document.getElementById('cb-editor').addEventListener('change', (ev) => {
   else delete settings.categoryBudgets[cat];
   saveJSON(LS_KEYS.settings, settings);
   recomputeAll();
+});
+
+// Picnic: import the JSON produced by picnic/picnic_export.py
+document.getElementById('pc-file').addEventListener('change', (ev) => {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || !Array.isArray(data.items)) throw new Error('Not a Picnic export (missing items array).');
+      picnicData = data;
+      saveJSON(LS_KEYS.picnic, picnicData);
+      settings.pcExpanded = true; saveJSON(LS_KEYS.settings, settings);
+      applyDisclosures();
+      recomputeAll();
+    } catch (e) {
+      alert('Could not read that file as a Picnic export:\n' + e.message);
+    }
+    ev.target.value = ''; // allow re-loading the same filename
+  };
+  reader.readAsText(file);
 });
 
 // Yearly tracker: year filter
