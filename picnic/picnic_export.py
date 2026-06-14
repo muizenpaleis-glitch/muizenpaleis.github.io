@@ -56,7 +56,12 @@ def load_dotenv():
                     continue
                 key, _, val = line.partition("=")
                 key = key.strip()
-                val = val.strip().strip('"').strip("'")
+                val = val.strip()
+                # Only strip surrounding quotes if the whole value is wrapped in
+                # matching quotes — never strip quote characters that are part of
+                # the password itself.
+                if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+                    val = val[1:-1]
                 if key and key not in os.environ:
                     os.environ[key] = val
 
